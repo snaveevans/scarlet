@@ -1,0 +1,22 @@
+services:
+  scarlet:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    volumes:
+      - target-repo:/repo
+      - ./configs:/config:ro
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    command: ["--config", "/config/config.json", "--once"]
+
+  seed:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    entrypoint: ["bash", "/app/docker/scripts/seed-target-repo.sh"]
+    volumes:
+      - target-repo:/repo
+
+volumes:
+  target-repo:

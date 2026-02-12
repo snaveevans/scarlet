@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/scarlet.instance-config.schema.json",
+  "title": "Scarlet Instance Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["targetRepo", "agent"],
+  "properties": {
+    "targetRepo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["localPath"],
+      "properties": {
+        "localPath": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Absolute path to the target git repository."
+        },
+        "remoteUrl": {
+          "type": "string",
+          "description": "Git remote URL for the target repo."
+        },
+        "mainBranch": {
+          "type": "string",
+          "default": "main",
+          "description": "Main branch name to track."
+        },
+        "prdGlob": {
+          "type": "string",
+          "default": "docs/prd/**/*.md",
+          "description": "Glob pattern for PRD files."
+        }
+      }
+    },
+    "polling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "intervalSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "default": 60,
+          "description": "Seconds between poll cycles."
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["mock", "opencode"],
+          "description": "Which coding agent to use."
+        },
+        "command": {
+          "type": "string",
+          "description": "CLI command to invoke the agent."
+        },
+        "timeout": {
+          "type": "integer",
+          "minimum": 10,
+          "default": 300,
+          "description": "Agent execution timeout in seconds."
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branchPrefix": {
+          "type": "string",
+          "default": "scarlet/",
+          "description": "Prefix for branches created by Scarlet."
+        },
+        "commitAuthor": {
+          "type": "string",
+          "default": "Scarlet Agent <scarlet@example.com>",
+          "description": "Author string for commits."
+        },
+        "githubToken": {
+          "type": "string",
+          "description": "GitHub token for PR creation. Supports ${VAR} env interpolation."
+        },
+        "createPr": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to create a pull request after pushing."
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "default": "/var/lib/scarlet/state.json",
+          "description": "Path to state file. Relative paths are resolved against targetRepo.localPath."
+        }
+      }
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info",
+          "description": "Minimum log level."
+        },
+        "file": {
+          "type": "string",
+          "description": "Optional path to log file. Relative paths are resolved against targetRepo.localPath."
+        }
+      }
+    }
+  }
+}

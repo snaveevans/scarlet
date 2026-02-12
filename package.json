@@ -2,14 +2,20 @@
   "name": "scarlet",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/index.mjs",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "test": "node --test 'tests/*.test.mjs'",
+    "start": "node src/index.mjs",
+    "test": "node --test 'tests/**/*.test.mjs'",
+    "test:unit": "node --test 'tests/unit/*.test.mjs'",
+    "test:integration": "node --test 'tests/integration/*.test.mjs'",
+    "test:legacy": "node --test 'tests/*.test.mjs'",
     "prd:new": "node scripts/render-prd.mjs",
-    "validate:jsonl": "node scripts/validate-jsonl.mjs"
+    "validate:jsonl": "node scripts/validate-jsonl.mjs",
+    "docker:build": "docker build -f docker/Dockerfile -t scarlet .",
+    "docker:test": "docker compose -f docker/docker-compose.yml up --build"
   },
   "repository": {
     "type": "git",
