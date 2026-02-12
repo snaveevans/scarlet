@@ -43,10 +43,10 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 ### Personas
 
-| Persona | Description |
-|---|---|
-| **Tyler (Operator)** | Sets up Scarlet on an Ubuntu machine, configures it to watch a target repo, and monitors its output via systemd and GitHub PRs. |
-| **Developer (Consumer)** | Merges PRDs into the target repo's main branch and reviews the implementation PRs that Scarlet produces. |
+| Persona                  | Description                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Tyler (Operator)**     | Sets up Scarlet on an Ubuntu machine, configures it to watch a target repo, and monitors its output via systemd and GitHub PRs. |
+| **Developer (Consumer)** | Merges PRDs into the target repo's main branch and reviews the implementation PRs that Scarlet produces.                        |
 
 ### Primary User Journey (Operator)
 
@@ -113,33 +113,39 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
   {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
-    "required": ["id", "title", "description", "requirements", "acceptance_criteria"],
+    "required": [
+      "id",
+      "title",
+      "description",
+      "requirements",
+      "acceptance_criteria",
+    ],
     "properties": {
       "id": {
         "type": "string",
         "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-        "description": "Unique slug identifier, e.g. 'add-user-auth'. Used in branch names and PR titles."
+        "description": "Unique slug identifier, e.g. 'add-user-auth'. Used in branch names and PR titles.",
       },
       "title": {
         "type": "string",
         "minLength": 5,
         "maxLength": 120,
-        "description": "Human-readable title."
+        "description": "Human-readable title.",
       },
       "description": {
         "type": "string",
         "minLength": 20,
-        "description": "Context, problem statement, and motivation."
+        "description": "Context, problem statement, and motivation.",
       },
       "goals": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "High-level goals."
+        "description": "High-level goals.",
       },
       "non_goals": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "Explicitly excluded items."
+        "description": "Explicitly excluded items.",
       },
       "requirements": {
         "type": "array",
@@ -148,11 +154,11 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
           "required": ["id", "text"],
           "properties": {
             "id": { "type": "string", "pattern": "^R[0-9]+$" },
-            "text": { "type": "string" }
-          }
+            "text": { "type": "string" },
+          },
         },
         "minItems": 1,
-        "description": "Functional requirements with stable IDs."
+        "description": "Functional requirements with stable IDs.",
       },
       "acceptance_criteria": {
         "type": "array",
@@ -163,27 +169,27 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
             "id": { "type": "string", "pattern": "^AC-[0-9]+$" },
             "given": { "type": "string" },
             "when": { "type": "string" },
-            "then": { "type": "string" }
-          }
+            "then": { "type": "string" },
+          },
         },
         "minItems": 1,
-        "description": "Testable acceptance criteria in Given/When/Then format."
+        "description": "Testable acceptance criteria in Given/When/Then format.",
       },
       "verification_command": {
         "type": "string",
-        "description": "Optional command to verify implementation (e.g. 'npm test'). Overrides global config if present."
+        "description": "Optional command to verify implementation (e.g. 'npm test'). Overrides global config if present.",
       },
       "technical_notes": {
         "type": "string",
-        "description": "Optional implementation hints, constraints, or architecture notes for the agent."
+        "description": "Optional implementation hints, constraints, or architecture notes for the agent.",
       },
       "files_to_modify": {
         "type": "array",
         "items": { "type": "string" },
-        "description": "Optional list of file paths the agent should focus on."
-      }
+        "description": "Optional list of file paths the agent should focus on.",
+      },
     },
-    "additionalProperties": false
+    "additionalProperties": false,
   }
   ```
 
@@ -204,22 +210,22 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 - **R7:** The configuration file must define the following fields (all required unless noted):
 
-  | Field | Type | Description | Default |
-  |---|---|---|---|
-  | `repo.url` | string | Git remote URL (SSH or HTTPS) of the target repo | *(required)* |
-  | `repo.local_path` | string | Absolute path to the local clone directory | *(required)* |
-  | `repo.branch` | string | Branch to watch for new PRDs | `main` |
-  | `repo.prd_directory` | string | Directory within the repo containing PRD files | `prds` |
-  | `poll_interval_seconds` | integer | Seconds between polling cycles | `30` |
-  | `agent.command` | string | Base command to invoke the coding agent | `opencode` |
-  | `agent.timeout_minutes` | integer | Max wall-clock time for a single agent run before it is killed | `60` |
-  | `agent.verification_command` | string (optional) | Global fallback command to verify success (e.g., `npm test`). Exit code 0 = success. Overridden by PRD-level `verification_command` if present. | *(none)* |
-  | `git.committer_name` | string | Git committer name for agent commits | `scarlet-bot` |
-  | `git.committer_email` | string | Git committer email for agent commits | `scarlet-bot@noreply` |
-  | `branch_prefix` | string | Prefix for working branches | `scarlet/` |
-  | `github.owner` | string | GitHub repository owner (user or org) | *(required)* |
-  | `github.repo` | string | GitHub repository name | *(required)* |
-  | `log_level` | string | One of: `debug`, `info`, `warn`, `error` | `info` |
+  | Field                        | Type              | Description                                                                                                                                     | Default               |
+  | ---------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+  | `repo.url`                   | string            | Git remote URL (SSH or HTTPS) of the target repo                                                                                                | _(required)_          |
+  | `repo.local_path`            | string            | Absolute path to the local clone directory                                                                                                      | _(required)_          |
+  | `repo.branch`                | string            | Branch to watch for new PRDs                                                                                                                    | `main`                |
+  | `repo.prd_directory`         | string            | Directory within the repo containing PRD files                                                                                                  | `prds`                |
+  | `poll_interval_seconds`      | integer           | Seconds between polling cycles                                                                                                                  | `30`                  |
+  | `agent.command`              | string            | Base command to invoke the coding agent                                                                                                         | `opencode`            |
+  | `agent.timeout_minutes`      | integer           | Max wall-clock time for a single agent run before it is killed                                                                                  | `60`                  |
+  | `agent.verification_command` | string (optional) | Global fallback command to verify success (e.g., `npm test`). Exit code 0 = success. Overridden by PRD-level `verification_command` if present. | _(none)_              |
+  | `git.committer_name`         | string            | Git committer name for agent commits                                                                                                            | `scarlet-bot`         |
+  | `git.committer_email`        | string            | Git committer email for agent commits                                                                                                           | `scarlet-bot@noreply` |
+  | `branch_prefix`              | string            | Prefix for working branches                                                                                                                     | `scarlet/`            |
+  | `github.owner`               | string            | GitHub repository owner (user or org)                                                                                                           | _(required)_          |
+  | `github.repo`                | string            | GitHub repository name                                                                                                                          | _(required)_          |
+  | `log_level`                  | string            | One of: `debug`, `info`, `warn`, `error`                                                                                                        | `info`                |
 
 - **R8:** Configuration is validated at startup using JSON Schema (ajv). If validation fails, Scarlet logs the specific validation errors and exits with code 1 within 2 seconds of launch.
 
@@ -357,8 +363,15 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 - **R45:** Each log line includes: `timestamp` (ISO 8601 with milliseconds and UTC timezone), `level`, `message`, `component` (e.g., `poller`, `agent`, `git`, `cleanup`, `config`, `github`), and an optional `context` object with structured metadata.
 
 - **R46:** Example log line:
+
   ```json
-  {"timestamp":"2026-02-11T14:30:00.123Z","level":"info","component":"poller","message":"New PRD detected","context":{"prd":"add-user-auth","commit":"a1b2c3d"}}
+  {
+    "timestamp": "2026-02-11T14:30:00.123Z",
+    "level": "info",
+    "component": "poller",
+    "message": "New PRD detected",
+    "context": { "prd": "add-user-auth", "commit": "a1b2c3d" }
+  }
   ```
 
 - **R47:** Scarlet scans every string value in every log line for known secret patterns (per R10) and replaces matches with `[REDACTED]` before writing. The scan operates on the final serialized JSON string as a safety net (not just on individual fields).
@@ -476,17 +489,17 @@ Scarlet has no graphical UI. The "interface" is:
 
 ### Loading / Empty / Error States
 
-| State | Behavior |
-|---|---|
-| **No PRDs ever detected** | Scarlet logs `No new commits` at `debug` level each poll cycle. No PRs created. |
-| **State file missing/corrupt** | Scarlet treats the current HEAD of the watched branch as the starting point (processes no historical PRDs). Logs a `warn` that state was initialized from HEAD. |
-| **State file references a commit that is no longer an ancestor of HEAD (force-push)** | Scarlet logs a `warn`, resets state to current HEAD, and continues. No historical PRDs are re-processed. |
-| **Target repo not cloned yet (`local_path` does not exist or is empty)** | Scarlet performs an initial `git clone` to `local_path` on first run. If clone fails, Scarlet exits with code 1 and logs the error. |
-| **`local_path` exists but is not a git repo** | Scarlet logs an `error` (`local_path exists but is not a git repository`) and exits with code 1. |
-| **Network unavailable during poll** | `git fetch` fails. Scarlet logs a `warn` and retries on the next poll cycle. No crash. |
-| **Agent produces no commits** | Treated as a failure. An empty commit is created so the branch can be pushed. Draft PR is created with a note "Agent produced no commits." |
-| **PRD JSON file is empty (0 bytes)** | Scarlet logs a `warn` (`PRD file is empty, skipping`) and advances past it without invoking the agent. |
-| **PRD JSON file fails schema validation** | Scarlet logs a `warn` with validation errors, creates a draft PR with the errors (no agent invocation), and advances past it. |
+| State                                                                                 | Behavior                                                                                                                                                        |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **No PRDs ever detected**                                                             | Scarlet logs `No new commits` at `debug` level each poll cycle. No PRs created.                                                                                 |
+| **State file missing/corrupt**                                                        | Scarlet treats the current HEAD of the watched branch as the starting point (processes no historical PRDs). Logs a `warn` that state was initialized from HEAD. |
+| **State file references a commit that is no longer an ancestor of HEAD (force-push)** | Scarlet logs a `warn`, resets state to current HEAD, and continues. No historical PRDs are re-processed.                                                        |
+| **Target repo not cloned yet (`local_path` does not exist or is empty)**              | Scarlet performs an initial `git clone` to `local_path` on first run. If clone fails, Scarlet exits with code 1 and logs the error.                             |
+| **`local_path` exists but is not a git repo**                                         | Scarlet logs an `error` (`local_path exists but is not a git repository`) and exits with code 1.                                                                |
+| **Network unavailable during poll**                                                   | `git fetch` fails. Scarlet logs a `warn` and retries on the next poll cycle. No crash.                                                                          |
+| **Agent produces no commits**                                                         | Treated as a failure. An empty commit is created so the branch can be pushed. Draft PR is created with a note "Agent produced no commits."                      |
+| **PRD JSON file is empty (0 bytes)**                                                  | Scarlet logs a `warn` (`PRD file is empty, skipping`) and advances past it without invoking the agent.                                                          |
+| **PRD JSON file fails schema validation**                                             | Scarlet logs a `warn` with validation errors, creates a draft PR with the errors (no agent invocation), and advances past it.                                   |
 
 ### Validation Rules
 
@@ -503,42 +516,43 @@ Scarlet has no graphical UI. The "interface" is:
 
 ### Data Inputs/Outputs
 
-| Data | Direction | Format | Location |
-|---|---|---|---|
-| Scarlet config | Input | YAML | `/etc/scarlet/config.yaml` or `$SCARLET_CONFIG` |
-| Environment secrets | Input | Key=Value (shell format) | `/etc/scarlet/env` |
-| PRD files | Input | JSON (schema-validated) | `<repo>/<prd_directory>/*.json` |
-| Rendered PRDs | Output (CLI) | Markdown | stdout or `.md` file next to JSON source |
-| Current PRD for agent | Internal | Markdown (rendered from JSON) | `<local_path>/.scarlet/current-prd.md` |
-| State file | Internal | JSON (`{"last_commit": "<sha>", "interrupted_prd": "<id or null>"}`) | `<local_path>/.scarlet/state.json` |
-| Agent logs | Internal | Text (stdout/stderr capture) | In-memory ring buffer, flushed to PR body |
-| Pull Requests | Output | GitHub PR (via `@octokit/rest`) | Target repo on GitHub |
-| Structured logs | Output | NDJSON | stdout → journald |
+| Data                  | Direction    | Format                                                               | Location                                        |
+| --------------------- | ------------ | -------------------------------------------------------------------- | ----------------------------------------------- |
+| Scarlet config        | Input        | YAML                                                                 | `/etc/scarlet/config.yaml` or `$SCARLET_CONFIG` |
+| Environment secrets   | Input        | Key=Value (shell format)                                             | `/etc/scarlet/env`                              |
+| PRD files             | Input        | JSON (schema-validated)                                              | `<repo>/<prd_directory>/*.json`                 |
+| Rendered PRDs         | Output (CLI) | Markdown                                                             | stdout or `.md` file next to JSON source        |
+| Current PRD for agent | Internal     | Markdown (rendered from JSON)                                        | `<local_path>/.scarlet/current-prd.md`          |
+| State file            | Internal     | JSON (`{"last_commit": "<sha>", "interrupted_prd": "<id or null>"}`) | `<local_path>/.scarlet/state.json`              |
+| Agent logs            | Internal     | Text (stdout/stderr capture)                                         | In-memory ring buffer, flushed to PR body       |
+| Pull Requests         | Output       | GitHub PR (via `@octokit/rest`)                                      | Target repo on GitHub                           |
+| Structured logs       | Output       | NDJSON                                                               | stdout → journald                               |
 
 ### External Dependencies
 
-| Dependency | Required Version | Purpose |
-|---|---|---|
-| Node.js | >= 20 LTS | Scarlet runtime |
-| git | >= 2.30 | Repo operations (fetch, checkout, branch, commit, push) |
-| `@octokit/rest` | latest | GitHub REST API client (PR creation, label management) |
-| `ajv` + `ajv-formats` | latest | JSON Schema validation (config + PRD) |
-| OpenCode CLI | latest | Coding agent (`opencode run`) |
-| systemd | >= 249 | Service management (Ubuntu 22.04 ships 249) |
+| Dependency            | Required Version | Purpose                                                 |
+| --------------------- | ---------------- | ------------------------------------------------------- |
+| Node.js               | >= 20 LTS        | Scarlet runtime                                         |
+| git                   | >= 2.30          | Repo operations (fetch, checkout, branch, commit, push) |
+| `@octokit/rest`       | latest           | GitHub REST API client (PR creation, label management)  |
+| `ajv` + `ajv-formats` | latest           | JSON Schema validation (config + PRD)                   |
+| OpenCode CLI          | latest           | Coding agent (`opencode run`)                           |
+| systemd               | >= 249           | Service management (Ubuntu 22.04 ships 249)             |
 
 ### Roles/Permissions
 
-| Context | Permission | Notes |
-|---|---|---|
-| `scarlet` system user | Read/write to `repo.local_path` only | No home directory, no login shell (`/usr/sbin/nologin`) |
-| `scarlet` system user | SSH key in `~scarlet/.ssh/` | Used for `git push` over SSH. Key pair generated during install, public key added to GitHub as a deploy key with write access. |
-| `GITHUB_TOKEN` | Scopes: `repo`, `pull_request:write` | Used only by `@octokit/rest` for API calls (PRs, labels). Not used for git push. |
-| `OPENCODE_API_KEY` | Per OpenCode's requirements | Passed through to agent subprocess environment |
-| Filesystem | `ProtectSystem=strict` blocks writes outside `ReadWritePaths` | systemd sandboxing |
+| Context               | Permission                                                    | Notes                                                                                                                          |
+| --------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `scarlet` system user | Read/write to `repo.local_path` only                          | No home directory, no login shell (`/usr/sbin/nologin`)                                                                        |
+| `scarlet` system user | SSH key in `~scarlet/.ssh/`                                   | Used for `git push` over SSH. Key pair generated during install, public key added to GitHub as a deploy key with write access. |
+| `GITHUB_TOKEN`        | Scopes: `repo`, `pull_request:write`                          | Used only by `@octokit/rest` for API calls (PRs, labels). Not used for git push.                                               |
+| `OPENCODE_API_KEY`    | Per OpenCode's requirements                                   | Passed through to agent subprocess environment                                                                                 |
+| Filesystem            | `ProtectSystem=strict` blocks writes outside `ReadWritePaths` | systemd sandboxing                                                                                                             |
 
 ### Auth Separation
 
 Git push (SSH key) and GitHub API (`GITHUB_TOKEN`) use **separate credentials**. This allows finer-grained permission control:
+
 - The SSH deploy key can be scoped to a single repo.
 - The `GITHUB_TOKEN` can be a fine-grained personal access token scoped to the target repo with only "Pull Requests: Write" and "Contents: Write" permissions.
 
@@ -550,37 +564,37 @@ All metrics are emitted as structured log events (queryable via `journalctl` + `
 
 ### Success Metrics
 
-| Metric | Type | Target |
-|---|---|---|
-| PRD-to-PR cycle time | Leading | < `agent.timeout_minutes` for successful runs |
-| PRD success rate | Lagging | Track over time (no target for v1) |
-| Agent timeout rate | Lagging | < 20% of runs |
-| PR creation failure rate | Lagging | < 5% of attempts |
+| Metric                   | Type    | Target                                        |
+| ------------------------ | ------- | --------------------------------------------- |
+| PRD-to-PR cycle time     | Leading | < `agent.timeout_minutes` for successful runs |
+| PRD success rate         | Lagging | Track over time (no target for v1)            |
+| Agent timeout rate       | Lagging | < 20% of runs                                 |
+| PR creation failure rate | Lagging | < 5% of attempts                              |
 
 ### Events to Capture
 
-| Event Name | Level | Properties |
-|---|---|---|
-| `scarlet.started` | info | `version`, `config_hash` |
-| `scarlet.stopped` | info | `reason` (`signal`, `error`, `config_invalid`) |
-| `poll.cycle` | debug | `last_commit`, `new_commit`, `new_prds_count` |
-| `prd.detected` | info | `prd_id`, `prd_file`, `commit_sha` |
-| `prd.validation_failed` | warn | `prd_file`, `errors` (array of validation error strings) |
-| `prd.skipped` | warn | `prd_id`, `reason` (`empty`, `invalid_schema`, `already_processed`) |
-| `prd.rendered` | debug | `prd_id`, `output_path` |
-| `agent.started` | info | `prd_id`, `branch`, `command` |
-| `agent.completed` | info | `prd_id`, `exit_code`, `duration_seconds`, `commit_count` |
-| `agent.timeout` | error | `prd_id`, `timeout_minutes` |
-| `verification.started` | info | `prd_id`, `command`, `source` (`prd` or `config`) |
-| `verification.completed` | info | `prd_id`, `exit_code`, `duration_seconds` |
-| `verification.timeout` | error | `prd_id`, `timeout_seconds` |
-| `git.push` | info | `branch`, `duration_seconds` |
-| `git.push_failed` | error | `branch`, `error_message` |
-| `pr.created` | info | `prd_id`, `pr_number`, `pr_url`, `draft` |
-| `pr.create_failed` | error | `prd_id`, `attempt`, `http_status`, `error_message` |
-| `pr.create_exhausted` | critical | `prd_id`, `branch`, `attempts` |
-| `cleanup.completed` | info | `prd_id` |
-| `cleanup.failed` | warn | `prd_id`, `error_message` |
+| Event Name               | Level    | Properties                                                          |
+| ------------------------ | -------- | ------------------------------------------------------------------- |
+| `scarlet.started`        | info     | `version`, `config_hash`                                            |
+| `scarlet.stopped`        | info     | `reason` (`signal`, `error`, `config_invalid`)                      |
+| `poll.cycle`             | debug    | `last_commit`, `new_commit`, `new_prds_count`                       |
+| `prd.detected`           | info     | `prd_id`, `prd_file`, `commit_sha`                                  |
+| `prd.validation_failed`  | warn     | `prd_file`, `errors` (array of validation error strings)            |
+| `prd.skipped`            | warn     | `prd_id`, `reason` (`empty`, `invalid_schema`, `already_processed`) |
+| `prd.rendered`           | debug    | `prd_id`, `output_path`                                             |
+| `agent.started`          | info     | `prd_id`, `branch`, `command`                                       |
+| `agent.completed`        | info     | `prd_id`, `exit_code`, `duration_seconds`, `commit_count`           |
+| `agent.timeout`          | error    | `prd_id`, `timeout_minutes`                                         |
+| `verification.started`   | info     | `prd_id`, `command`, `source` (`prd` or `config`)                   |
+| `verification.completed` | info     | `prd_id`, `exit_code`, `duration_seconds`                           |
+| `verification.timeout`   | error    | `prd_id`, `timeout_seconds`                                         |
+| `git.push`               | info     | `branch`, `duration_seconds`                                        |
+| `git.push_failed`        | error    | `branch`, `error_message`                                           |
+| `pr.created`             | info     | `prd_id`, `pr_number`, `pr_url`, `draft`                            |
+| `pr.create_failed`       | error    | `prd_id`, `attempt`, `http_status`, `error_message`                 |
+| `pr.create_exhausted`    | critical | `prd_id`, `branch`, `attempts`                                      |
+| `cleanup.completed`      | info     | `prd_id`                                                            |
+| `cleanup.failed`         | warn     | `prd_id`, `error_message`                                           |
 
 ---
 
@@ -598,13 +612,13 @@ All metrics are emitted as structured log events (queryable via `journalctl` + `
 
 ### Monitoring Signals (What to Watch)
 
-| Signal | How to Observe | Action Threshold |
-|---|---|---|
-| Service health | `systemctl is-active scarlet` | Alert if `inactive` or `failed` |
-| Repeated restart loops | `systemctl show scarlet -p NRestarts` | Alert if > 3 restarts in 10 minutes |
-| Agent timeout rate | `journalctl -u scarlet --output=json \| jq 'select(.message == "agent.timeout")'` | Investigate if > 2 consecutive timeouts |
-| PR creation failures | `journalctl -u scarlet --output=json \| jq 'select(.level == "critical")'` | Immediate investigation |
-| Disk usage at `local_path` | Standard disk monitoring | Alert if partition > 90% full |
+| Signal                     | How to Observe                                                                    | Action Threshold                        |
+| -------------------------- | --------------------------------------------------------------------------------- | --------------------------------------- |
+| Service health             | `systemctl is-active scarlet`                                                     | Alert if `inactive` or `failed`         |
+| Repeated restart loops     | `systemctl show scarlet -p NRestarts`                                             | Alert if > 3 restarts in 10 minutes     |
+| Agent timeout rate         | `journalctl -u scarlet --output=json \| jq 'select(.message == "agent.timeout")'` | Investigate if > 2 consecutive timeouts |
+| PR creation failures       | `journalctl -u scarlet --output=json \| jq 'select(.level == "critical")'`        | Immediate investigation                 |
+| Disk usage at `local_path` | Standard disk monitoring                                                          | Alert if partition > 90% full           |
 
 ### Rollback Approach
 
@@ -616,19 +630,19 @@ All metrics are emitted as structured log events (queryable via `journalctl` + `
 
 ## Risks
 
-- **RISK-01: Agent produces broken code that passes verification.** *Mitigation:* Human always reviews the PR before merging. PRDs should include comprehensive acceptance criteria. This is acceptable for v1.
+- **RISK-01: Agent produces broken code that passes verification.** _Mitigation:_ Human always reviews the PR before merging. PRDs should include comprehensive acceptance criteria. This is acceptable for v1.
 
-- **RISK-02: OpenCode CLI interface changes (breaking update).** *Mitigation:* Pin OpenCode version in Dockerfile. Document the expected CLI contract (`opencode run` with `--file` flag). Agent command is configurable, so a wrapper script can adapt.
+- **RISK-02: OpenCode CLI interface changes (breaking update).** _Mitigation:_ Pin OpenCode version in Dockerfile. Document the expected CLI contract (`opencode run` with `--file` flag). Agent command is configurable, so a wrapper script can adapt.
 
-- **RISK-03: `GITHUB_TOKEN` or `OPENCODE_API_KEY` leaked in agent output.** *Mitigation:* R10 redaction applies to all log lines and PR bodies. Agent subprocess inherits env vars but Scarlet sanitizes captured output before persisting anywhere.
+- **RISK-03: `GITHUB_TOKEN` or `OPENCODE_API_KEY` leaked in agent output.** _Mitigation:_ R10 redaction applies to all log lines and PR bodies. Agent subprocess inherits env vars but Scarlet sanitizes captured output before persisting anywhere.
 
-- **RISK-04: Agent modifies files outside the repo (escape).** *Mitigation:* The `scarlet` user has write access only to `local_path`. systemd `ProtectSystem=strict` and `ProtectHome=yes` block writes elsewhere. For stronger isolation, run Scarlet inside a container.
+- **RISK-04: Agent modifies files outside the repo (escape).** _Mitigation:_ The `scarlet` user has write access only to `local_path`. systemd `ProtectSystem=strict` and `ProtectHome=yes` block writes elsewhere. For stronger isolation, run Scarlet inside a container.
 
-- **RISK-05: Polling at high frequency causes GitHub rate limiting.** *Mitigation:* Minimum poll interval is 10 seconds (enforced by config validation). Default is 30 seconds. `git fetch` uses SSH (not API), so GitHub API rate limits are unrelated. The API is only called when creating PRs and labels — well within rate limits.
+- **RISK-05: Polling at high frequency causes GitHub rate limiting.** _Mitigation:_ Minimum poll interval is 10 seconds (enforced by config validation). Default is 30 seconds. `git fetch` uses SSH (not API), so GitHub API rate limits are unrelated. The API is only called when creating PRs and labels — well within rate limits.
 
-- **RISK-06: Large PRDs or agent output exceeds memory.** *Mitigation:* Agent output capture uses a ring buffer capped at 50 MB (R23). PR body log sections are truncated (R29, R32). PRD JSON files larger than 1 MB are skipped with a warning.
+- **RISK-06: Large PRDs or agent output exceeds memory.** _Mitigation:_ Agent output capture uses a ring buffer capped at 50 MB (R23). PR body log sections are truncated (R29, R32). PRD JSON files larger than 1 MB are skipped with a warning.
 
-- **RISK-07: `@octokit/rest` API version deprecation.** *Mitigation:* Pin `@octokit/rest` in `package.json`. GitHub REST API v3 is stable with long deprecation windows. Update on a scheduled cadence.
+- **RISK-07: `@octokit/rest` API version deprecation.** _Mitigation:_ Pin `@octokit/rest` in `package.json`. GitHub REST API v3 is stable with long deprecation windows. Update on a scheduled cadence.
 
 ---
 
@@ -636,39 +650,39 @@ All metrics are emitted as structured log events (queryable via `journalctl` + `
 
 All open questions from the design phase have been resolved. Decisions are codified directly in the requirements they affect.
 
-| # | Decision | Resolution | Requirement |
-|---|---|---|---|
-| Q1 | SSH vs HTTPS for git push | **SSH-only** via deploy key on the `scarlet` user. HTTPS deferred. | R35 |
-| Q2 | Force-push handling | **Reset state to current HEAD**, log `warn`, continue. No historical PRDs re-processed. | UX table (force-push row) |
-| Q3 | `scarlet render` packaging | **Sub-command** of the main `scarlet` binary. One install, one binary. | R4, R5 |
-| Q4 | PRD schema strictness | **Strict** (`additionalProperties: false`). Prevents silent typos. Can be relaxed later. | R2 |
-| Q5 | Auto-clone vs pre-clone | **Auto-clone** on first run if `local_path` doesn't exist. Use as-is if it's already a valid repo. | UX table (not cloned row) |
-| Q6 | Prompt template configurability | **Hardcoded** as a versioned constant in source code. Tested and deterministic. | R19 |
+| #   | Decision                        | Resolution                                                                                         | Requirement               |
+| --- | ------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------- |
+| Q1  | SSH vs HTTPS for git push       | **SSH-only** via deploy key on the `scarlet` user. HTTPS deferred.                                 | R35                       |
+| Q2  | Force-push handling             | **Reset state to current HEAD**, log `warn`, continue. No historical PRDs re-processed.            | UX table (force-push row) |
+| Q3  | `scarlet render` packaging      | **Sub-command** of the main `scarlet` binary. One install, one binary.                             | R4, R5                    |
+| Q4  | PRD schema strictness           | **Strict** (`additionalProperties: false`). Prevents silent typos. Can be relaxed later.           | R2                        |
+| Q5  | Auto-clone vs pre-clone         | **Auto-clone** on first run if `local_path` doesn't exist. Use as-is if it's already a valid repo. | UX table (not cloned row) |
+| Q6  | Prompt template configurability | **Hardcoded** as a versioned constant in source code. Tested and deterministic.                    | R19                       |
 
 ---
 
 ## Glossary
 
-| Term | Definition |
-|---|---|
-| **PRD** | Product Requirements Document. A JSON file (`.json`) conforming to the Scarlet PRD schema, placed in the configured `prd_directory` of the target repo. Describes a feature for the agent to implement. |
-| **PRD schema** | The JSON Schema that defines the required and optional fields for a PRD file. See R2. |
-| **Rendered PRD** | A human-readable markdown file generated from a PRD JSON file by `scarlet render`. Not the source of truth — the JSON file is. |
-| **Target repo** | The GitHub repository that Scarlet watches for new PRDs and pushes implementation branches to. Scarlet itself lives in a separate repo. |
-| **Watched branch** | The branch on the target repo that Scarlet polls for new PRD commits (default: `main`). |
-| **Working branch** | A temporary local+remote branch created by Scarlet for the agent to commit implementation work to. Named `<branch_prefix><prd-id>`. |
-| **PRD id** | The `id` field from the PRD JSON. A lowercase kebab-case slug (e.g., `add-user-auth`). Used in branch names, log messages, and PR titles. |
-| **PRD slug** | Synonym for PRD id. |
-| **Agent** | The AI coding tool (OpenCode in v1) invoked as a subprocess to implement the PRD. |
-| **OpenCode** | An open-source, provider-agnostic AI coding agent with a TUI and non-interactive CLI mode (`opencode run`). See [opencode.ai](https://opencode.ai). |
-| **`opencode run`** | The non-interactive CLI mode of OpenCode. Accepts a prompt string and optional `--file` attachments. Does not launch the TUI. |
+| Term                     | Definition                                                                                                                                                                                                              |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PRD**                  | Product Requirements Document. A JSON file (`.json`) conforming to the Scarlet PRD schema, placed in the configured `prd_directory` of the target repo. Describes a feature for the agent to implement.                 |
+| **PRD schema**           | The JSON Schema that defines the required and optional fields for a PRD file. See R2.                                                                                                                                   |
+| **Rendered PRD**         | A human-readable markdown file generated from a PRD JSON file by `scarlet render`. Not the source of truth — the JSON file is.                                                                                          |
+| **Target repo**          | The GitHub repository that Scarlet watches for new PRDs and pushes implementation branches to. Scarlet itself lives in a separate repo.                                                                                 |
+| **Watched branch**       | The branch on the target repo that Scarlet polls for new PRD commits (default: `main`).                                                                                                                                 |
+| **Working branch**       | A temporary local+remote branch created by Scarlet for the agent to commit implementation work to. Named `<branch_prefix><prd-id>`.                                                                                     |
+| **PRD id**               | The `id` field from the PRD JSON. A lowercase kebab-case slug (e.g., `add-user-auth`). Used in branch names, log messages, and PR titles.                                                                               |
+| **PRD slug**             | Synonym for PRD id.                                                                                                                                                                                                     |
+| **Agent**                | The AI coding tool (OpenCode in v1) invoked as a subprocess to implement the PRD.                                                                                                                                       |
+| **OpenCode**             | An open-source, provider-agnostic AI coding agent with a TUI and non-interactive CLI mode (`opencode run`). See [opencode.ai](https://opencode.ai).                                                                     |
+| **`opencode run`**       | The non-interactive CLI mode of OpenCode. Accepts a prompt string and optional `--file` attachments. Does not launch the TUI.                                                                                           |
 | **Verification command** | A shell command (e.g., `npm test`) run after the agent finishes to confirm the implementation meets acceptance criteria. Can be specified per-PRD (in the JSON) or globally (in Scarlet config). Success = exit code 0. |
-| **State file** | A JSON file at `<local_path>/.scarlet/state.json` that tracks the last-processed commit SHA and any interrupted PRD id. |
-| **Draft PR** | A GitHub pull request created in draft state, indicating it is not ready for merge. Used by Scarlet to surface failures and validation errors. |
-| **Redaction** | The process of replacing sensitive values (tokens, keys, passwords) with `[REDACTED]` in log output and PR bodies before they are written or sent. |
-| **Ring buffer** | A fixed-size buffer that overwrites the oldest entries when full. Used by Scarlet to cap agent output capture at 50 MB. |
-| **NDJSON** | Newline-Delimited JSON. Each line of output is a complete, self-contained JSON object. Scarlet's log format. |
-| **`@octokit/rest`** | The official GitHub REST API client for JavaScript/TypeScript. Used by Scarlet for PR creation and label management. |
-| **Deploy key** | An SSH key associated with a single GitHub repository (not a user account). Grants push access to that repo only. Used by the `scarlet` system user for `git push`. |
-| **`scarlet` user** | A dedicated Linux system user with minimal permissions, under which the Scarlet systemd service runs. |
-| **Fine-grained PAT** | A GitHub Personal Access Token scoped to specific repositories and permissions. Recommended for `GITHUB_TOKEN`. |
+| **State file**           | A JSON file at `<local_path>/.scarlet/state.json` that tracks the last-processed commit SHA and any interrupted PRD id.                                                                                                 |
+| **Draft PR**             | A GitHub pull request created in draft state, indicating it is not ready for merge. Used by Scarlet to surface failures and validation errors.                                                                          |
+| **Redaction**            | The process of replacing sensitive values (tokens, keys, passwords) with `[REDACTED]` in log output and PR bodies before they are written or sent.                                                                      |
+| **Ring buffer**          | A fixed-size buffer that overwrites the oldest entries when full. Used by Scarlet to cap agent output capture at 50 MB.                                                                                                 |
+| **NDJSON**               | Newline-Delimited JSON. Each line of output is a complete, self-contained JSON object. Scarlet's log format.                                                                                                            |
+| **`@octokit/rest`**      | The official GitHub REST API client for JavaScript/TypeScript. Used by Scarlet for PR creation and label management.                                                                                                    |
+| **Deploy key**           | An SSH key associated with a single GitHub repository (not a user account). Grants push access to that repo only. Used by the `scarlet` system user for `git push`.                                                     |
+| **`scarlet` user**       | A dedicated Linux system user with minimal permissions, under which the Scarlet systemd service runs.                                                                                                                   |
+| **Fine-grained PAT**     | A GitHub Personal Access Token scoped to specific repositories and permissions. Recommended for `GITHUB_TOKEN`.                                                                                                         |
