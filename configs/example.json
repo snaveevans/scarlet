@@ -1,0 +1,28 @@
+{
+  "targetRepo": {
+    "localPath": "/home/user/projects/my-project",
+    "remoteUrl": "git@github.com:org/my-project.git",
+    "mainBranch": "main",
+    "prdGlob": "docs/prd/**/*.md"
+  },
+  "polling": {
+    "intervalSeconds": 60
+  },
+  "agent": {
+    "type": "mock",
+    "timeout": 300
+  },
+  "git": {
+    "branchPrefix": "scarlet/",
+    "commitAuthor": "Scarlet Agent <scarlet@example.com>",
+    "githubToken": "${GITHUB_TOKEN}",
+    "createPr": true
+  },
+  "state": {
+    "path": ".scarlet/state.json"
+  },
+  "logging": {
+    "level": "info",
+    "file": ".scarlet/scarlet.log"
+  }
+}
