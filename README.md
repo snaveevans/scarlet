@@ -18,9 +18,10 @@ The install script will:
 
 1. Verify Node.js 20+ is installed
 2. Install npm dependencies
-3. Copy an example config to `/etc/scarlet/myproject.json`
-4. Install a systemd service (`scarlet@myproject`)
-5. Print next steps
+3. Create a dedicated `scarlet` system user
+4. Copy an example config to `/etc/scarlet/myproject.json`
+5. Install and verify a systemd service (`scarlet@myproject`)
+6. Print next steps
 
 After install, edit the config and start:
 
@@ -57,11 +58,11 @@ Each Scarlet instance is configured with a JSON file. The install script places 
     "createPr": true
   },
   "state": {
-    "path": ".scarlet/state.json"
+    "path": "/var/lib/scarlet/state.json"
   },
   "logging": {
     "level": "info",
-    "file": ".scarlet/scarlet.log"
+    "file": "/var/log/scarlet/scarlet.log"
   }
 }
 ```
@@ -73,7 +74,7 @@ Each Scarlet instance is configured with a JSON file. The install script places 
 | Field        | Required | Default            | Description                                                 |
 | ------------ | -------- | ------------------ | ----------------------------------------------------------- |
 | `localPath`  | **yes**  | —                  | Absolute path to the target git repo on disk                |
-| `remoteUrl`  | **yes**  | —                  | Git remote URL (used to extract owner/repo for PR creation) |
+| `remoteUrl`  | no       | —                  | Git remote URL (required when `git.createPr` is `true`)      |
 | `mainBranch` | no       | `main`             | Branch to track for PRD changes                             |
 | `prdGlob`    | no       | `docs/prd/**/*.md` | Glob pattern for PRD files (supports `*.json`, `*.jsonl`)   |
 
@@ -104,14 +105,14 @@ Each Scarlet instance is configured with a JSON file. The install script places 
 
 | Field  | Default               | Description                                         |
 | ------ | --------------------- | --------------------------------------------------- |
-| `path` | `.scarlet/state.json` | State file path, relative to `targetRepo.localPath` |
+| `path` | `/var/lib/scarlet/state.json` | State file path. Relative paths resolve from `targetRepo.localPath` |
 
 #### `logging`
 
 | Field   | Default | Description                                         |
 | ------- | ------- | --------------------------------------------------- |
 | `level` | `info`  | Minimum log level: `debug`, `info`, `warn`, `error` |
-| `file`  | —       | Log file path, relative to `targetRepo.localPath`   |
+| `file`  | —       | Optional log file path. Relative paths resolve from `targetRepo.localPath` |
 
 ### Environment Variable Interpolation
 
@@ -125,6 +126,8 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 ```
 
 The systemd service loads this file automatically via `EnvironmentFile`.
+
+File permissions are set to `640` with group `scarlet` during install.
 
 When running manually, export the variable or use an env prefix:
 
@@ -170,6 +173,13 @@ npm run docker:build
 npm run docker:test    # runs with seed repo + mock agent
 ```
 
+## Failure Notifications
+
+- If PRD processing fails, Scarlet creates or updates a **single failure PR per PRD**.
+- Failure PRs include a report file at `docs/scarlet/failures/*.md` with redacted/truncated logs.
+- On successful processing of that PRD later, Scarlet closes the open failure PR automatically.
+- If any PRD fails in a cycle, Scarlet keeps `lastProcessedCommit` unchanged so failures are retried.
+
 ## Running Multiple Instances
 
 Each instance watches one repo. Run multiple instances by creating separate configs:
@@ -197,5 +207,6 @@ npm run test:integration # integration tests only
 - `src/detector/` — PRD change detection
 - `src/planner/` — PRD → agent instructions
 - `src/executor/` — Agent dispatch layer
+- `src/redaction/` — Secret redaction and detection helpers
 - `agents/` — Agent adapters (`mock`, `opencode`)
 - `schemas/` — JSON schemas for config validation

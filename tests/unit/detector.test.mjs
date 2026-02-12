@@ -147,4 +147,31 @@ describe('detector', () => {
 
     assert.equal(changes.length, 2);
   });
+
+  it('reprocesses PRDs that previously failed even with same hash', async () => {
+    fs.mkdirSync(path.join(tmpDir, 'docs', 'prd'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'docs', 'prd', 'retry.md'), '# PRD: Retry');
+    gitCommitAll(tmpDir, 'init');
+
+    const sm = createStateManager(path.join(tmpDir, '.scarlet', 'state.json'));
+    const content = '# PRD: Retry';
+    const hash = sm.contentHash(content);
+    sm.save({
+      lastProcessedCommit: null,
+      processedPrds: {
+        'docs/prd/retry.md': { status: 'failed', contentHash: hash },
+      },
+    });
+
+    const changes = await detectPrdChanges({
+      cwd: tmpDir,
+      fromCommit: null,
+      toCommit: 'HEAD',
+      prdGlob: 'docs/prd/**/*.md',
+      stateManager: sm,
+    });
+
+    assert.equal(changes.length, 1);
+    assert.equal(changes[0].filePath, 'docs/prd/retry.md');
+  });
 });

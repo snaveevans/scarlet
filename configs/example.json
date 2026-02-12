@@ -19,10 +19,10 @@
     "createPr": true
   },
   "state": {
-    "path": ".scarlet/state.json"
+    "path": "/var/lib/scarlet/state.json"
   },
   "logging": {
     "level": "info",
-    "file": ".scarlet/scarlet.log"
+    "file": "/var/log/scarlet/scarlet.log"
   }
 }

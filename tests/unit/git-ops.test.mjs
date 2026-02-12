@@ -100,4 +100,20 @@ describe('git-ops', () => {
     assert.equal(files.length, 2);
     assert.ok(files.includes('docs/a.md'));
   });
+
+  it('stagePaths stages only selected paths', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'a1');
+    fs.writeFileSync(path.join(tmpDir, 'b.txt'), 'b1');
+    execFileSync('git', ['add', '-A'], { cwd: tmpDir });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: tmpDir });
+
+    fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'a2');
+    fs.writeFileSync(path.join(tmpDir, 'b.txt'), 'b2');
+
+    await gitOps.stagePaths(tmpDir, ['a.txt']);
+    const status = execFileSync('git', ['status', '--porcelain'], { cwd: tmpDir }).toString();
+
+    assert.ok(status.includes('M  a.txt'));
+    assert.ok(status.includes(' M b.txt'));
+  });
 });

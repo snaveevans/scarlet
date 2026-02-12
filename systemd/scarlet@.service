@@ -5,18 +5,27 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/node /opt/scarlet/src/index.mjs --config /etc/scarlet/%i.json
+User=scarlet
+Group=scarlet
+WorkingDirectory=__SCARLET_DIR__
+ExecStart=/usr/bin/node __SCARLET_DIR__/src/index.mjs --config /etc/scarlet/%i.json
 Restart=always
 RestartSec=10
 Environment=NODE_ENV=production
+EnvironmentFile=-/etc/scarlet/%i.env
 
 # Security hardening
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/var/lib/scarlet
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+UMask=0027
 
-# Logging goes to journald; also written to file per config
+# Runtime directories
+StateDirectory=scarlet
+LogsDirectory=scarlet
+
+# Logging goes to journald; optional file logging configured in instance config
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=scarlet-%i

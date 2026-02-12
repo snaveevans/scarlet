@@ -25,7 +25,7 @@ export async function detectPrdChanges({ cwd, fromCommit, toCommit, prdGlob, sta
     const hash = stateManager.contentHash(content);
 
     const existing = state.processedPrds[filePath];
-    if (existing && existing.contentHash === hash) continue; // unchanged
+    if (existing && existing.status === 'completed' && existing.contentHash === hash) continue; // unchanged
 
     changes.push({ filePath, content, contentHash: hash });
   }

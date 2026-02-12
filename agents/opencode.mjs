@@ -34,11 +34,19 @@ export async function execute({ workingDirectory, instructions, branchName, time
       .trim()
       .split('\n')
       .filter(Boolean)
-      .map(line => line.slice(3));
+      .map(line => line.slice(3).trim())
+      .flatMap(file => {
+        if (!file.includes(' -> ')) return [file];
+        const [from, to] = file.split(' -> ');
+        return [from.trim(), to.trim()];
+      })
+      .filter(Boolean);
+
+    const deduped = Array.from(new Set(filesChanged));
 
     return {
-      success: filesChanged.length > 0,
-      filesChanged,
+      success: deduped.length > 0,
+      filesChanged: deduped,
       logs: stdout + (stderr ? '\n' + stderr : ''),
     };
   } catch (err) {

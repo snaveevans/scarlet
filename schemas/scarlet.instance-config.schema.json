@@ -97,8 +97,8 @@
       "properties": {
         "path": {
           "type": "string",
-          "default": ".scarlet/state.json",
-          "description": "Path to state file, relative to targetRepo.localPath."
+          "default": "/var/lib/scarlet/state.json",
+          "description": "Path to state file. Relative paths are resolved against targetRepo.localPath."
         }
       }
     },
@@ -114,7 +114,7 @@
         },
         "file": {
           "type": "string",
-          "description": "Path to log file, relative to targetRepo.localPath."
+          "description": "Optional path to log file. Relative paths are resolved against targetRepo.localPath."
         }
       }
     }

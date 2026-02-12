@@ -43,7 +43,7 @@ describe('config', () => {
     assert.equal(config.agent.timeout, 300);
     assert.equal(config.git.branchPrefix, 'scarlet/');
     assert.equal(config.git.createPr, true);
-    assert.equal(config.state.path, '.scarlet/state.json');
+    assert.equal(config.state.path, '/var/lib/scarlet/state.json');
     assert.equal(config.logging.level, 'info');
   });
 

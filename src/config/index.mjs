@@ -27,7 +27,7 @@ const DEFAULTS = {
   polling: { intervalSeconds: 60 },
   agent: { timeout: 300 },
   git: { branchPrefix: 'scarlet/', commitAuthor: 'Scarlet Agent <scarlet@example.com>', createPr: true },
-  state: { path: '.scarlet/state.json' },
+  state: { path: '/var/lib/scarlet/state.json' },
   logging: { level: 'info' },
 };
 
