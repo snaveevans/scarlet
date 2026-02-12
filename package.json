@@ -1,0 +1,25 @@
+{
+  "name": "scarlet",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "node --test 'tests/*.test.mjs'",
+    "prd:new": "node scripts/render-prd.mjs",
+    "validate:jsonl": "node scripts/validate-jsonl.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/snaveevans/scarlet"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}
