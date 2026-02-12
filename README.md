@@ -15,6 +15,7 @@ bash install.sh myproject
 ```
 
 The install script will:
+
 1. Verify Node.js 20+ is installed
 2. Install npm dependencies
 3. Copy an example config to `/etc/scarlet/myproject.json`
@@ -69,48 +70,48 @@ Each Scarlet instance is configured with a JSON file. The install script places 
 
 #### `targetRepo` (required)
 
-| Field | Required | Default | Description |
-|---|---|---|---|
-| `localPath` | **yes** | — | Absolute path to the target git repo on disk |
-| `remoteUrl` | no | — | Git remote URL (used to extract owner/repo for PR creation) |
-| `mainBranch` | no | `main` | Branch to track for PRD changes |
-| `prdGlob` | no | `docs/prd/**/*.md` | Glob pattern for PRD files (supports `*.json`, `*.jsonl`) |
+| Field        | Required | Default            | Description                                                 |
+| ------------ | -------- | ------------------ | ----------------------------------------------------------- |
+| `localPath`  | **yes**  | —                  | Absolute path to the target git repo on disk                |
+| `remoteUrl`  | **yes**  | —                  | Git remote URL (used to extract owner/repo for PR creation) |
+| `mainBranch` | no       | `main`             | Branch to track for PRD changes                             |
+| `prdGlob`    | no       | `docs/prd/**/*.md` | Glob pattern for PRD files (supports `*.json`, `*.jsonl`)   |
 
 #### `polling`
 
-| Field | Default | Description |
-|---|---|---|
-| `intervalSeconds` | `60` | Seconds between poll cycles (minimum: 5) |
+| Field             | Default | Description                              |
+| ----------------- | ------- | ---------------------------------------- |
+| `intervalSeconds` | `60`    | Seconds between poll cycles (minimum: 5) |
 
 #### `agent` (required)
 
-| Field | Required | Default | Description |
-|---|---|---|---|
-| `type` | **yes** | — | Agent to use: `mock` or `opencode` |
-| `command` | no | — | CLI command to invoke the agent (e.g., `opencode`) |
-| `timeout` | no | `300` | Agent execution timeout in seconds (minimum: 10) |
+| Field     | Required | Default | Description                                        |
+| --------- | -------- | ------- | -------------------------------------------------- |
+| `type`    | **yes**  | —       | Agent to use: `mock` or `opencode`                 |
+| `command` | no       | —       | CLI command to invoke the agent (e.g., `opencode`) |
+| `timeout` | no       | `300`   | Agent execution timeout in seconds (minimum: 10)   |
 
 #### `git`
 
-| Field | Default | Description |
-|---|---|---|
-| `branchPrefix` | `scarlet/` | Prefix for branches Scarlet creates |
-| `commitAuthor` | `Scarlet Agent <scarlet@example.com>` | Git author string for commits |
-| `githubToken` | — | GitHub token for PR creation (supports `${VAR}` syntax) |
-| `createPr` | `true` | Whether to create a pull request after pushing |
+| Field          | Default                               | Description                                             |
+| -------------- | ------------------------------------- | ------------------------------------------------------- |
+| `branchPrefix` | `scarlet/`                            | Prefix for branches Scarlet creates                     |
+| `commitAuthor` | `Scarlet Agent <scarlet@example.com>` | Git author string for commits                           |
+| `githubToken`  | —                                     | GitHub token for PR creation (supports `${VAR}` syntax) |
+| `createPr`     | `true`                                | Whether to create a pull request after pushing          |
 
 #### `state`
 
-| Field | Default | Description |
-|---|---|---|
+| Field  | Default               | Description                                         |
+| ------ | --------------------- | --------------------------------------------------- |
 | `path` | `.scarlet/state.json` | State file path, relative to `targetRepo.localPath` |
 
 #### `logging`
 
-| Field | Default | Description |
-|---|---|---|
-| `level` | `info` | Minimum log level: `debug`, `info`, `warn`, `error` |
-| `file` | — | Log file path, relative to `targetRepo.localPath` |
+| Field   | Default | Description                                         |
+| ------- | ------- | --------------------------------------------------- |
+| `level` | `info`  | Minimum log level: `debug`, `info`, `warn`, `error` |
+| `file`  | —       | Log file path, relative to `targetRepo.localPath`   |
 
 ### Environment Variable Interpolation
 
