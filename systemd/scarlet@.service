@@ -1,0 +1,25 @@
+[Unit]
+Description=Scarlet Autonomous Coding Agent (instance: %i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /opt/scarlet/src/index.mjs --config /etc/scarlet/%i.json
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/scarlet
+
+# Logging goes to journald; also written to file per config
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=scarlet-%i
+
+[Install]
+WantedBy=multi-user.target
