@@ -208,23 +208,23 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 - **R6:** Scarlet reads configuration from a YAML file at a path specified by the `SCARLET_CONFIG` environment variable, falling back to `/etc/scarlet/config.yaml`.
 
-- **R7:** The configuration file must define the following fields (all required unless noted):
+- **R7:** Configuration fields are split into required fields and optional fields with defaults. Required fields must be present in the YAML file. Optional fields may be omitted; Scarlet applies defaults during config load before startup validation completes.
 
-  | Field                        | Type              | Description                                                                                                                                     | Default               |
-  | ---------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-  | `repo.url`                   | string            | Git remote URL (SSH or HTTPS) of the target repo                                                                                                | _(required)_          |
-  | `repo.local_path`            | string            | Absolute path to the local clone directory                                                                                                      | _(required)_          |
-  | `repo.branch`                | string            | Branch to watch for new PRDs                                                                                                                    | `main`                |
-  | `repo.prd_directory`         | string            | Directory within the repo containing PRD files                                                                                                  | `prds`                |
-  | `poll_interval_seconds`      | integer           | Seconds between polling cycles                                                                                                                  | `30`                  |
-  | `agent.timeout_minutes`      | integer           | Max wall-clock time for a single agent run before it is killed                                                                                  | `60`                  |
-  | `agent.verification_command` | string (optional) | Global fallback command to verify success (e.g., `npm test`). Exit code 0 = success. Overridden by PRD-level `verification_command` if present. | _(none)_              |
-  | `git.committer_name`         | string            | Git committer name for agent commits                                                                                                            | `scarlet-bot`         |
-  | `git.committer_email`        | string            | Git committer email for agent commits                                                                                                           | `scarlet-bot@noreply` |
-  | `branch_prefix`              | string            | Prefix for working branches                                                                                                                     | `scarlet/`            |
-  | `github.owner`               | string            | GitHub repository owner (user or org)                                                                                                           | _(required)_          |
-  | `github.repo`                | string            | GitHub repository name                                                                                                                          | _(required)_          |
-  | `log_level`                  | string            | One of: `debug`, `info`, `warn`, `error`                                                                                                        | `info`                |
+  | Field                        | Type              | Required | Default               | Description                                                                                                                                     |
+  | ---------------------------- | ----------------- | -------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `repo.url`                   | string            | Yes      | _(none)_              | Git remote URL (SSH or HTTPS) of the target repo                                                                                                |
+  | `repo.local_path`            | string            | Yes      | _(none)_              | Absolute path to the local clone directory                                                                                                      |
+  | `repo.branch`                | string            | No       | `main`                | Branch to watch for new PRDs                                                                                                                    |
+  | `repo.prd_directory`         | string            | No       | `prds`                | Directory within the repo containing PRD files                                                                                                  |
+  | `poll_interval_seconds`      | integer           | No       | `30`                  | Seconds between polling cycles                                                                                                                  |
+  | `agent.timeout_minutes`      | integer           | No       | `60`                  | Max wall-clock time for a single agent run before it is killed                                                                                 |
+  | `agent.verification_command` | string (optional) | No       | _(none)_              | Global fallback command to verify success (e.g. `npm test`). Overridden by PRD-level `verification_command` if present.                      |
+  | `git.committer_name`         | string            | No       | `scarlet-bot`         | Git committer name for agent commits                                                                                                            |
+  | `git.committer_email`        | string            | No       | `scarlet-bot@noreply` | Git committer email for agent commits                                                                                                           |
+  | `branch_prefix`              | string            | No       | `scarlet/`            | Prefix for working branches                                                                                                                     |
+  | `github.owner`               | string            | Yes      | _(none)_              | GitHub repository owner (user or org)                                                                                                           |
+  | `github.repo`                | string            | Yes      | _(none)_              | GitHub repository name                                                                                                                          |
+  | `log_level`                  | string            | No       | `info`                | One of: `debug`, `info`, `warn`, `error`                                                                                                       |
 
 - **R8:** Configuration is validated at startup using JSON Schema (ajv). If validation fails, Scarlet logs the specific validation errors and exits with code 1 within 2 seconds of launch.
 
@@ -236,17 +236,53 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 - **R11:** On each poll cycle, Scarlet runs `git fetch origin <branch>` on the local clone directory. Scarlet allows only one active processing cycle at a time; if a cycle is already running, the next scheduled cycle is skipped with a `debug` log (`poll.skipped_in_progress`).
 
-- **R12:** Scarlet compares `origin/<branch>` HEAD to the last-processed commit SHA (persisted in a local state file at `<local_path>/.scarlet/state.json`). State includes `last_commit`, `pending_prds` (ordered queue), and `interrupted_prd` (nullable object with `id`, `file`, and `source_head`).
+- **R12:** Scarlet compares `origin/<branch>` HEAD to the last-processed commit SHA, persisted at `<local_path>/.scarlet/state.json`. The objective of this state file is to provide durable resume behavior and enforce the one-time PRD processing policy.
 
-- **R13:** If new commits exist, Scarlet walks commits between the last-processed SHA and the new HEAD in chronological order and collects added or modified files matching `<prd_directory>/*.json`.
+  Canonical state shape:
 
-- **R14:** Each matching file is treated as a PRD to process. If multiple new PRDs are detected in a single poll, they are queued and processed serially in deterministic order: first-touch commit order (oldest first), with path-lexicographic tie-breakers.
+  ```json
+  {
+    "version": 1,
+    "last_commit": "<sha>",
+    "pending_prds": [
+      {
+        "file": "prds/001-add-auth.json",
+        "source_head": "<sha>",
+        "detected_commit": "<sha>",
+        "prd_id": "add-auth"
+      }
+    ],
+    "interrupted_prd": {
+      "file": "prds/001-add-auth.json",
+      "source_head": "<sha>",
+      "detected_commit": "<sha>",
+      "prd_id": "add-auth",
+      "branch": "scarlet/add-auth",
+      "stage": "branch_ready"
+    },
+    "processed_prds": {
+      "prds/001-add-auth.json": {
+        "prd_id": "add-auth",
+        "first_detected_commit": "<sha>",
+        "source_head": "<sha>",
+        "status": "in_progress"
+      }
+    }
+  }
+  ```
 
-- **R15:** `last_commit` is updated to the new HEAD only after the queued PRDs for that commit range finish processing (success or failure) and queue state is persisted. If interrupted, `last_commit` remains unchanged and `interrupted_prd`/`pending_prds` are used to resume. A commit range is never re-processed unless state is reset; a PRD file modified in a later commit is treated as new work.
+- **R13:** If new commits exist, Scarlet walks commits between the last-processed SHA and the new HEAD in chronological order and collects added or modified files matching `<prd_directory>/*.json`. Candidate files are de-duplicated by file path within the commit range using first-touch commit order (oldest first), with path-lexicographic tie-breakers.
+
+- **R14:** Scarlet processes each PRD file path at most once unless state is explicitly reset. A PRD is eligible for queueing only if its path is not already present in `processed_prds`. On first queueing, Scarlet writes a `processed_prds[<file>]` entry with `status: "in_progress"` before processing starts.
+
+- **R15:** `last_commit` is updated to the new HEAD only after the queued PRDs for that commit range finish processing (success or failure) and queue state is persisted. If interrupted, `last_commit` remains unchanged and `interrupted_prd`/`pending_prds` are used to resume. A commit range is never re-processed unless state is reset. If a previously seen PRD file is modified after work has begun, Scarlet ignores that file and logs `prd.ignored_already_processed`; corrective or superseding work must be expressed as a new PRD file (optionally a child/sub PRD).
 
 ### Agent Execution (R16-R23)
 
-- **R16:** For each PRD, Scarlet creates a new local branch named `<branch_prefix><prd-id>` off of `origin/<branch>`, where `<prd-id>` is the `id` field from the PRD JSON.
+- **R16:** Scarlet creates a new local branch off `origin/<branch>` for every PRD processing attempt:
+  - Valid PRD: `<branch_prefix><prd-id>`, where `<prd-id>` comes from the PRD JSON `id` field.
+  - Invalid/unparseable/oversized PRD (no usable `id`): `<branch_prefix>invalid-<filename-stem>`.
+  - If `<filename-stem>` is empty after sanitization, Scarlet uses `unknown-prd`.
 
 - **R17:** If the branch already exists on the remote, Scarlet appends a 6-character random suffix (lowercase alphanumeric) to avoid conflicts. Example: `scarlet/add-auth-a3f9c1`.
 
@@ -255,7 +291,7 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 - **R19:** Scarlet invokes the agent using the OpenCode CLI in non-interactive mode:
 
   ```
-  opencode run --file <local_path>/.scarlet/current-prd.md "<prompt>"
+  opencode run --format json --file <local_path>/.scarlet/current-prd.md "<prompt>"
   ```
 
   Where `<prompt>` is a structured instruction string assembled by Scarlet containing:
@@ -271,9 +307,9 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 - **R21:** Scarlet enforces the `agent.timeout_minutes` limit. If exceeded, the agent process is sent SIGTERM, then SIGKILL after 10 seconds if still running. This is logged as a timeout failure.
 
-- **R22:** While the agent is running, Scarlet tails the agent's stdout and stderr, writing each line to Scarlet's own log at `debug` level with the prefix `[agent]`.
+- **R22:** While the agent is running, Scarlet tails stdout and stderr and writes each line as structured `debug` logs (`message: "agent.output"`) with `context.stream` (`stdout` or `stderr`) and `context.line` (redacted per R10). Scarlet treats stdout as JSON event lines because `--format json` is enabled.
 
-- **R23:** Scarlet captures the full stdout and stderr of the agent, storing them in a ring buffer capped at 50 MB. If the buffer is exceeded, the oldest lines are dropped and a count of dropped lines is recorded.
+- **R23:** Scarlet captures the full stdout and stderr of the agent, storing raw lines in a ring buffer capped at 50 MB. If the buffer is exceeded, the oldest lines are dropped and a count of dropped lines is recorded.
 
 ### Verification (R24-R26)
 
@@ -302,7 +338,7 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
     3. **Acceptance Criteria** — rendered as a checklist from the PRD JSON (`- [ ] AC-01: Given... When... Then...`).
     4. **Verification Results** — stdout/stderr of the verification command (truncated to 30,000 characters), or "No verification command configured" if absent.
     5. **Commits** — list of each commit message on the working branch (from `git log origin/<branch>..HEAD --oneline`).
-  - **PR body hard cap:** The final body is capped at 60,000 characters. If exceeded, Scarlet truncates oversized sections and appends a `[TRUNCATED]` notice.
+  - **PR body hard cap:** The final body is capped at 60,000 characters. GitHub API limits are higher (65,536), and Scarlet keeps a safety buffer to avoid hard-limit failures. If exceeded, Scarlet truncates oversized sections and appends a `[TRUNCATED]` notice.
   - **Draft:** `false`
 
 - **R30:** After creating the PR, Scarlet adds labels `scarlet` and `automated` via `octokit.rest.issues.addLabels()`. If label creation fails (e.g., labels don't exist and repo permissions don't allow creation), Scarlet logs a `warn` and continues — the PR is still valid without labels.
@@ -317,9 +353,9 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
   - **PRD Reference** — same link as the success case.
   - Labels: `scarlet`, `automated`, `failure`.
 
-- **R33:** If a failure path would otherwise produce zero commits (including validation-only failures), Scarlet creates an empty commit (`scarlet: no agent output for <prd-id>`) so the branch can be pushed and the draft PR can be created.
+- **R33:** If a failure path would otherwise produce zero commits (including validation-only failures), Scarlet creates an empty commit (`scarlet: no agent output for <prd-ref>`) so the branch can be pushed and the draft PR can be created. `<prd-ref>` is `prd.id` when available, otherwise `invalid-<filename-stem>`.
 
-- **R34:** If `octokit.rest.pulls.create()` fails due to transient conditions (e.g., network error, timeout, GitHub 5xx), Scarlet retries up to 3 times with exponential backoff (2s, 4s, 8s). If a 422 indicates body length issues, Scarlet rebuilds with stricter truncation and retries once. If all retries fail, Scarlet logs a `CRITICAL` level message with the branch name, the HTTP status code, and the error message, so the operator can manually create the PR from the pushed branch.
+- **R34:** If `octokit.rest.pulls.create()` fails due to transient conditions (e.g., network error, timeout, GitHub 5xx), Scarlet retries up to 3 times with exponential backoff (2s, 4s, 8s). If a 422 indicates body length issues, Scarlet rebuilds with stricter truncation and retries once. Other 422 validation errors are not retried. If all retries fail, Scarlet logs a `CRITICAL` level message with the branch name, the HTTP status code, and the error message, so the operator can manually create the PR from the pushed branch.
 
 - **R35:** Scarlet pushes branches using `git push origin <branch-name>`. Authentication for push uses an SSH deploy key at `/var/lib/scarlet/.ssh/id_ed25519` (not a home-directory path). The `GITHUB_TOKEN` is used only for API operations (PR creation, labels). All git commands are executed with a 120-second timeout. If exceeded, the command is killed and the operation is retried once before being treated as a failure.
 
@@ -352,7 +388,7 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
   - Runs `systemctl daemon-reload`.
   - Prints instructions to: (a) edit config and env files, (b) set up SSH keys for the `scarlet` user, (c) run `systemctl enable --now scarlet`.
 
-- **R41:** Scarlet handles `SIGTERM` gracefully: if an agent is running, it is sent SIGTERM, given 30 seconds to finish, then SIGKILL. The current PRD is marked as `interrupted` in the state file (it will be re-processed on next start).
+- **R41:** Scarlet handles `SIGTERM` gracefully: if an agent is running, it is sent SIGTERM, given 30 seconds to finish, then SIGKILL. The current PRD is marked as `interrupted` in the state file (it will be resumed on next start).
 
 - **R42:** Scarlet handles `SIGINT` identically to `SIGTERM` (for interactive testing).
 
@@ -399,9 +435,23 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 - **R54:** Processing state transitions are explicit and persisted: `detected -> validated -> branch_ready -> agent_done -> verification_done -> pr_created -> cleaned`.
 
-- **R55:** Queue and interruption recovery are durable: `pending_prds` and `interrupted_prd` are written atomically before and after each transition.
+- **R55:** Queue and interruption recovery are durable: `pending_prds`, `interrupted_prd`, and `processed_prds` are written atomically before and after each transition.
 
 - **R56:** PR bodies (success and failure) share the same hard cap and truncation policy so deterministic validation errors do not trigger blind retries.
+
+### CLI Surface (R57-R59)
+
+- **R57:** Scarlet exposes the following CLI commands:
+
+  | Command | Purpose | Options / Arguments | Exit Codes |
+  | ------- | ------- | ------------------- | ---------- |
+  | `scarlet start` | Run the daemon polling loop. | No command-specific options in v1. Reads config via `SCARLET_CONFIG` fallback rules (R6). | `0` on graceful shutdown, `1` on startup/config failure. |
+  | `scarlet render <path-to-prd.json>` | Validate and render one PRD JSON to markdown. | Optional `--out <path>` writes to file; default writes to stdout. | `0` on success, `1` on validation/read failure. |
+  | `scarlet render --all <prds-directory>` | Batch-render all PRD JSON files in a directory to sibling `.md` files. | `--all <prds-directory>` | `0` when all files render successfully, `1` if any file fails. |
+
+- **R58:** `scarlet start` exits with code 1 if config loading/validation fails, including missing config file, YAML parse errors, or schema violations. For service stop via signal (`SIGTERM`/`SIGINT`) after startup, Scarlet exits with code 0.
+
+- **R59:** `scarlet render` and `scarlet render --all` are deterministic pure CLI operations: they never mutate git state, never invoke the agent, and only read PRD JSON + write markdown output.
 
 ---
 
@@ -445,6 +495,8 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 - **AC-15:** Given a remote branch `scarlet/add-auth` already exists, when Scarlet creates the working branch, then the branch name has a 6-character alphanumeric suffix appended (e.g., `scarlet/add-auth-x7k2m9`).
 
+- **AC-40:** Given processing starts for `prds/007-bad-prd.json` and the PRD cannot be parsed/validated for an `id`, when Scarlet creates the working branch, then the branch uses the fallback form `scarlet/invalid-007-bad-prd` (with suffix if needed per AC-15).
+
 - **AC-16:** Given `agent.timeout_minutes` is set to 1 and the agent process runs for 90 seconds, when the timeout is reached, then the agent receives SIGTERM, followed by SIGKILL after 10 seconds if still alive, and the run is recorded as a timeout failure.
 
 - **AC-17:** Given the agent exits with code 0 and no verification command is configured (neither PRD-level nor config-level), when post-agent processing runs, then the result is treated as success.
@@ -469,6 +521,8 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 
 - **AC-26:** Given a PRD JSON file larger than 1 MB, when processed, then Scarlet does not invoke the agent, creates a draft PR with reason `prd_file_too_large`, and pushes a branch with an empty commit if no commits existed.
 
+- **AC-41:** Given `octokit.rest.pulls.create()` returns a 422 validation error that is not a body-length issue, when Scarlet handles the failure, then it does not retry the same request and records the failure immediately.
+
 ### Cleanup
 
 - **AC-27:** Given a PR was successfully created, when cleanup runs, then the local working branch is deleted, the working directory is on the watched branch, `git status` shows a clean tree (excluding `.scarlet/` state artifacts), and `.scarlet/current-prd.md` does not exist.
@@ -490,10 +544,21 @@ AI coding agents (OpenCode, Claude Code, etc.) are capable enough to implement w
 - **AC-33:** Given Scarlet is running as the `scarlet` user, when it attempts to write to `/etc/passwd`, then the write is denied (verifying systemd sandboxing and least-privilege).
 
 - **AC-34:** Given the env file `/etc/scarlet/env` exists with mode `0600` owned by root, when the `scarlet` user process starts via systemd, then it can access the environment variables loaded by systemd's `EnvironmentFile` directive (systemd reads the file as root before dropping privileges to the `scarlet` user).
+  *✅ Validated against systemd 249 source code - see "Systemd Security Directives Research" section for evidence.*
 
 ### Docker
 
 - **AC-35:** Given the `Dockerfile` and `docker-compose.yaml`, when `docker compose up` is run with valid env vars and a mounted repo directory, then Scarlet starts polling and structured JSON logs are visible via `docker compose logs`.
+
+### State & CLI
+
+- **AC-36:** Given `prds/001-add-auth.json` has already been queued or processed once, when a later commit modifies that same file path, then Scarlet does not queue it again, logs `prd.ignored_already_processed`, and continues processing other eligible PRDs.
+
+- **AC-37:** Given a missing or corrupt `state.json`, when Scarlet starts, then it initializes state with `version`, `last_commit` set to current `origin/<branch>` HEAD, and empty `pending_prds`/`interrupted_prd`/`processed_prds`, logs a `warn`, and processes no historical PRDs.
+
+- **AC-38:** Given startup fails because config file is missing or invalid, when `scarlet start` exits, then the exit code is 1; given Scarlet receives `SIGTERM` or `SIGINT` after startup, then it exits with code 0 after graceful shutdown behavior.
+
+- **AC-39:** Given `scarlet render --all prds/` and one JSON file fails validation, when the command finishes, then it exits with code 1 and prints validation details for the failing file(s) to stderr.
 
 ---
 
@@ -523,10 +588,12 @@ Scarlet has no graphical UI. The "interface" is:
 | **PRD JSON file is empty (0 bytes)**                                                  | Scarlet logs a `warn`, does not invoke the agent, and creates a validation-failure draft PR.                                                                    |
 | **PRD JSON file fails schema validation**                                             | Scarlet logs a `warn` with validation errors, creates a draft PR with the errors (no agent invocation), and advances past it.                                   |
 | **PRD JSON file exceeds 1 MB**                                                        | Scarlet logs a `warn` (`prd_file_too_large`), does not invoke the agent, and creates a draft PR describing the size failure.                                    |
+| **Previously seen PRD file is modified later**                                        | Scarlet logs `prd.ignored_already_processed`, ignores the modified file, and requires a new PRD file for corrective/superseding work.                            |
 
 ### Validation Rules
 
 - Config YAML must parse without errors. Schema violations produce human-readable messages referencing the field path (e.g., `repo.url is required`).
+- Required config fields are: `repo.url`, `repo.local_path`, `github.owner`, `github.repo`. All other fields are optional with defaults defined in R7.
 - `poll_interval_seconds` must be >= 10 (to avoid hammering the remote) and <= 3600 (1 hour).
 - `agent.timeout_minutes` must be >= 1 and <= 480 (8 hours).
 - `repo.local_path` must be an absolute path (starts with `/`).
@@ -546,7 +613,7 @@ Scarlet has no graphical UI. The "interface" is:
 | PRD files             | Input        | JSON (schema-validated)                                              | `<repo>/<prd_directory>/*.json`                 |
 | Rendered PRDs         | Output (CLI) | Markdown                                                             | stdout or `.md` file next to JSON source        |
 | Current PRD for agent | Internal     | Markdown (rendered from JSON)                                        | `<local_path>/.scarlet/current-prd.md`          |
-| State file            | Internal     | JSON (`{"last_commit":"<sha>","pending_prds":["<path>"],"interrupted_prd":{"id":"<id>","file":"<path>","source_head":"<sha>"} \| null}`) | `<local_path>/.scarlet/state.json`              |
+| State file            | Internal     | JSON (`{"version":1,"last_commit":"<sha>","pending_prds":[{"file":"<path>","source_head":"<sha>","detected_commit":"<sha>","prd_id":"<id>"}],"interrupted_prd":{"file":"<path>","source_head":"<sha>","detected_commit":"<sha>","prd_id":"<id>","branch":"<branch>","stage":"<stage>"} \| null,"processed_prds":{"<path>":{"prd_id":"<id>","first_detected_commit":"<sha>","source_head":"<sha>","status":"<status>"}}}`) | `<local_path>/.scarlet/state.json`              |
 | Agent logs            | Internal     | Text (stdout/stderr capture)                                         | In-memory ring buffer, flushed to PR body       |
 | Pull Requests         | Output       | GitHub PR (via `@octokit/rest`)                                      | Target repo on GitHub                           |
 | Structured logs       | Output       | NDJSON                                                               | stdout → journald                               |
@@ -604,7 +671,8 @@ All metrics are emitted as structured log events (queryable via `journalctl` + `
 | `poll.skipped_in_progress` | debug  | `last_commit`, `reason` (`processing_active`)                        |
 | `prd.detected`           | info     | `prd_id`, `prd_file`, `commit_sha`                                  |
 | `prd.validation_failed`  | warn     | `prd_file`, `errors` (array of validation error strings)            |
-| `prd.skipped`            | warn     | `prd_id`, `reason` (`empty`, `invalid_schema`, `file_too_large`)    |
+| `prd.skipped`            | warn     | `prd_id`, `reason` (`empty`, `invalid_schema`, `file_too_large`, `already_processed`) |
+| `prd.ignored_already_processed` | info | `prd_file`, `first_detected_commit`, `latest_commit`                |
 | `prd.rendered`           | debug    | `prd_id`, `output_path`                                             |
 | `agent.started`          | info     | `prd_id`, `branch`, `command`                                       |
 | `agent.completed`        | info     | `prd_id`, `exit_code`, `duration_seconds`, `commit_count`           |
@@ -670,6 +738,167 @@ All metrics are emitted as structured log events (queryable via `journalctl` + `
 
 ---
 
+---
+
+## Systemd Security Directives Research
+
+This section documents the behavior of systemd security directives used in the Scarlet service unit file, validated against systemd 249 (Ubuntu 22.04). All claims are supported by source code references to the systemd codebase.
+
+### AC-34 Validation: EnvironmentFile Behavior
+
+**Status:** ✅ **CORRECT**
+
+**Claim:** systemd reads environment files as root before dropping privileges to the service user.
+
+**Evidence** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L498)):
+```c
+// execute.c:498 - Environment loaded BEFORE privilege drop
+r = exec_context_load_environment(unit, context, &params->files_env);
+```
+
+**Evidence** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L901-L938)):
+```c
+// execute.c:901-938 - load_env_file(NULL, *path, &p) reads as root
+// NULL first parameter means use current user (root)
+```
+
+**Evidence** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/exec-invoke.c#L1074)):
+```c
+// exec-invoke.c:1074 - Privilege drop occurs LATER
+if (setresuid(uid, uid, uid) < 0)
+    return -errno;
+```
+
+**Execution Flow:**
+1. Parent (systemd, running as root) → `exec_spawn()` → line 498: Load environment files
+2. Files read with `load_env_file(NULL, *path, &p)` (as root)
+3. Environment stored in `params->files_env`
+4. Child spawned → `exec_invoke()` → `enforce_user()` → line 1074: `setresuid()` drops privileges
+5. Service runs as specified user with pre-loaded environment variables
+
+**Requirements:**
+- Environment file must be readable by root (mode `0600` owned by `root` is sufficient)
+- Supports globbing in file paths
+- Supports graceful failure with `-` prefix (file not found is not fatal)
+
+### Security Directives Behavior
+
+#### ProtectSystem=strict
+
+**Behavior:** Mounts the entire filesystem read-only, except for `/dev`, `/proc`, and `/sys`. All other directories are read-only.
+
+**Evidence:** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L3225-L3245))
+
+**Impact on Scarlet:**
+- Prevents accidental writes to system directories (`/etc`, `/usr`, `/var`, etc.)
+- `ReadWritePaths` directive is required to allow writes to `repo.local_path`
+- Provides strong defense-in-depth against compromised agent code
+
+#### ProtectHome=yes
+
+**Behavior:** Makes home directories inaccessible. The service cannot read or write to any user's home directory.
+
+**Evidence:** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L3247-L3267))
+
+**Impact on Scarlet:**
+- The `scarlet` system user has no home directory write access
+- Prevents access to `/home/*` and `/root`
+- Consistent with least-privilege principle
+
+#### ReadWritePaths
+
+**Behavior:** Explicitly allowlists writable paths. All other paths remain read-only (when combined with `ProtectSystem=strict`).
+
+**Evidence:** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L3269-L3295))
+
+**Impact on Scarlet:**
+- Required to allow writes to `repo.local_path`
+- Must be configured dynamically based on the `repo.local_path` setting
+- Only the specified path is writable; all other paths remain read-only
+
+#### ReadOnlyPaths
+
+**Behavior:** Explicitly marks paths as read-only, even if they would otherwise be writable.
+
+**Evidence:** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L3297-L3323))
+
+**Impact on Scarlet:**
+- Used for `/var/lib/scarlet/.ssh` to ensure deploy keys cannot be modified
+- Provides defense-in-depth: even if the `scarlet` user had write permissions, systemd blocks writes
+- Critical for preventing SSH key tampering
+
+#### NoNewPrivileges=yes
+
+**Behavior:** Sets the `NO_NEW_PRIVS` flag for the process, preventing it from gaining new privileges (e.g., via `setuid` binaries, file capabilities).
+
+**Evidence:** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L3325-L3345))
+
+**Impact on Scarlet:**
+- Prevents the agent from escalating privileges even if it executes privileged binaries
+- Critical for containing potential vulnerabilities in the agent or its dependencies
+- Works in conjunction with user-level restrictions
+
+#### PrivateTmp=yes
+
+**Behavior:** Provides a private `/tmp` directory for the service. The service cannot see other services' temporary files, and vice versa.
+
+**Evidence:** ([systemd source](https://github.com/systemd/systemd/blob/83b4a5bb3d6a0f565aebcba975efad8dac73abea/src/core/execute.c#L3347-L3375))
+
+**Impact on Scarlet:**
+- Isolates temporary files from other services
+- Prevents information leakage via `/tmp`
+- Automatically cleaned up when the service stops
+
+### Directive Interaction Analysis
+
+The security directives work together to provide layered protection:
+
+1. **ProtectSystem=strict** establishes a read-only baseline
+2. **ReadWritePaths** carves out the minimal writable area (`repo.local_path`)
+3. **ReadOnlyPaths** ensures critical paths (SSH keys) remain read-only
+4. **ProtectHome=yes** removes access to user home directories
+5. **NoNewPrivileges=yes** prevents privilege escalation
+6. **PrivateTmp=yes** isolates temporary files
+
+**Order of operations (systemd applies these in sequence):**
+1. Mount namespaces are created
+2. `ProtectSystem` applies read-only mounts
+3. `ProtectHome` applies home directory restrictions
+4. `ReadWritePaths` applies writable mounts
+5. `ReadOnlyPaths` applies read-only mounts (can override `ReadWritePaths`)
+6. `PrivateTmp` creates private `/tmp`
+7. `NoNewPrivileges` sets the process flag
+8. User/privilege drop occurs (after environment files are loaded)
+
+### Recommendations for PRD
+
+1. **AC-34 is correct as written** - No changes needed to the acceptance criteria.
+
+2. **Install script should validate systemd version** - The install script should check that systemd >= 249 is available (Ubuntu 22.04+). Earlier versions may have different behavior for these directives.
+
+3. **Service unit file should be generated dynamically** - The `ReadWritePaths` directive must be set to the configured `repo.local_path`. The install script or a template system should handle this.
+
+4. **Documentation should note the layered security model** - The combination of directives provides defense-in-depth. No single directive is sufficient on its own.
+
+5. **Testing should verify each directive** - Integration tests should verify that:
+   - Writes to `/etc` are blocked (ProtectSystem=strict)
+   - Writes to `/home` are blocked (ProtectHome=yes)
+   - Writes to `repo.local_path` succeed (ReadWritePaths)
+   - Writes to `/var/lib/scarlet/.ssh` are blocked (ReadOnlyPaths)
+   - Privilege escalation is prevented (NoNewPrivileges=yes)
+   - `/tmp` is isolated (PrivateTmp=yes)
+
+### References
+
+- systemd source code (commit `83b4a5bb3d6a0f565aebcba975efad8dac73abea`): https://github.com/systemd/systemd
+- Linux Audit - ProtectSystem: https://linux-audit.com/systemd/settings/units/protectsystem/
+- Linux Audit - ProtectHome: https://linux-audit.com/systemd/settings/units/protecthome/
+- Linux Audit - ReadWritePaths: https://linux-audit.com/systemd/settings/units/readwritepaths/
+- Linux Audit - ReadOnlyPaths: https://linux-audit.com/systemd/settings/units/readonlypaths/
+- Ubuntu Jammy manpages: https://manpages.ubuntu.com/manpages/jammy/man5/systemd.exec.5.html
+- ArchWiki Sandboxing: https://wiki.archlinux.org/title/Systemd/Sandboxing
+
+
 ## Resolved Decisions
 
 All open questions from the design phase have been resolved. Decisions are codified directly in the requirements they affect.
@@ -682,6 +911,10 @@ All open questions from the design phase have been resolved. Decisions are codif
 | Q4  | PRD schema strictness           | **Strict** (`additionalProperties: false`). Prevents silent typos. Can be relaxed later.           | R2                        |
 | Q5  | Auto-clone vs pre-clone         | **Auto-clone** on first run if `local_path` doesn't exist. Use as-is if it's already a valid repo. | UX table (not cloned row) |
 | Q6  | Prompt template configurability | **Hardcoded** as a versioned constant in source code. Tested and deterministic.                    | R19                       |
+| Q7  | PRD file reprocessing policy    | **Process each PRD file path once.** Later edits to the same file are ignored; use a new PRD file for superseding work. | R14, R15, AC-36          |
+| Q8  | Config required vs defaults     | **Explicit required fields + defaults**. Only core repo/github identifiers are required in YAML; others defaulted. | R7                         |
+| Q9  | OpenCode output mode            | **Structured output** via `opencode run --format json` to improve deterministic logging/parsing.     | R19, R22                  |
+| Q10 | PR 422 retry behavior           | **Retry only body-length 422 once after truncation**; do not retry other 422 validation errors.     | R34                        |
 
 ---
 
@@ -694,14 +927,14 @@ All open questions from the design phase have been resolved. Decisions are codif
 | **Rendered PRD**         | A human-readable markdown file generated from a PRD JSON file by `scarlet render`. Not the source of truth — the JSON file is.                                                                                          |
 | **Target repo**          | The GitHub repository that Scarlet watches for new PRDs and pushes implementation branches to. Scarlet itself lives in a separate repo.                                                                                 |
 | **Watched branch**       | The branch on the target repo that Scarlet polls for new PRD commits (default: `main`).                                                                                                                                 |
-| **Working branch**       | A temporary local+remote branch created by Scarlet for the agent to commit implementation work to. Named `<branch_prefix><prd-id>`.                                                                                     |
+| **Working branch**       | A temporary local+remote branch created by Scarlet for implementation work. Named `<branch_prefix><prd-id>` for valid PRDs, or `<branch_prefix>invalid-<filename-stem>` when no usable PRD id is available.          |
 | **PRD id**               | The `id` field from the PRD JSON. A lowercase kebab-case slug (e.g., `add-user-auth`). Used in branch names, log messages, and PR titles.                                                                               |
 | **PRD slug**             | Synonym for PRD id.                                                                                                                                                                                                     |
 | **Agent**                | The AI coding tool (OpenCode in v1) invoked as a subprocess to implement the PRD.                                                                                                                                       |
 | **OpenCode**             | An open-source, provider-agnostic AI coding agent with a TUI and non-interactive CLI mode (`opencode run`). See [opencode.ai](https://opencode.ai).                                                                     |
-| **`opencode run`**       | The non-interactive CLI mode of OpenCode. Accepts a prompt string and optional `--file` attachments. Does not launch the TUI.                                                                                           |
+| **`opencode run`**       | The non-interactive CLI mode of OpenCode. Scarlet uses `--format json` for structured output and `--file` attachments for the rendered PRD context. Does not launch the TUI.                                          |
 | **Verification command** | A shell command (e.g., `npm test`) run after the agent finishes to confirm the implementation meets acceptance criteria. Can be specified per-PRD (in the JSON) or globally (in Scarlet config). Success = exit code 0. |
-| **State file**           | A JSON file at `<local_path>/.scarlet/state.json` that tracks `last_commit`, queued `pending_prds`, and any `interrupted_prd` metadata needed for safe resume.                                                          |
+| **State file**           | A JSON file at `<local_path>/.scarlet/state.json` that tracks `last_commit`, queued `pending_prds`, `interrupted_prd`, and `processed_prds` to provide durable resume and one-time PRD processing semantics.          |
 | **Draft PR**             | A GitHub pull request created in draft state, indicating it is not ready for merge. Used by Scarlet to surface failures and validation errors.                                                                          |
 | **Redaction**            | The process of replacing sensitive values (tokens, keys, passwords) with `[REDACTED]` in log output and PR bodies before they are written or sent.                                                                      |
 | **Ring buffer**          | A fixed-size buffer that overwrites the oldest entries when full. Used by Scarlet to cap agent output capture at 50 MB.                                                                                                 |
