@@ -1,9 +1,21 @@
-import { resolve } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { resolveExecutionOrder, hasFailedDependency } from '../planner/dependency-graph.js';
 import { runValidationPipeline } from '../validator/validator.js';
 import { buildPrompt } from '../utils/context-builder.js';
-import { stageAndCommit, createAndCheckoutBranch, sanitizeBranchName } from '../utils/git.js';
+import { createLLMClient } from '../llm/providers.js';
+import {
+  stageAndCommit,
+  createAndCheckoutBranch,
+  sanitizeBranchName,
+  getDiffAgainstBase,
+} from '../utils/git.js';
 import { runScaffold } from '../scaffold/index.js';
+import {
+  formatReviewForPR,
+  reviewFixesToTasks,
+  runSelfReview,
+} from '../review/index.js';
 import { StateManager } from '../state/state-manager.js';
 import { ProgressLog } from '../state/progress-log.js';
 import type { AgentAdapter } from './agent-adapter.js';
@@ -110,44 +122,33 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     }
   }
 
-  // Main execution loop
-  for (const taskSnapshot of orderedTasks) {
-    // Always read latest state
+  async function executeStateTask(taskSnapshot: Task): Promise<void> {
     const currentTask = stateManager.getTask(taskSnapshot.id);
-    if (!currentTask) continue;
+    if (!currentTask) return;
 
-    // Skip already completed tasks
     if (currentTask.status === 'passed' || currentTask.status === 'skipped') {
-      continue;
+      return;
     }
 
-    // Check dependency failures
     const allTasks = stateManager.getState().tasks;
     if (hasFailedDependency(currentTask, allTasks) && config.skipFailedDeps) {
       stateManager.updateTask(currentTask.id, { status: 'skipped' });
       progressLog.taskSkipped(currentTask.id, 'dependency failed');
-      continue;
+      return;
     }
 
-    // Mark in progress
     stateManager.updateTask(currentTask.id, { status: 'in_progress' });
     stateManager.setCurrentTask(currentTask.id);
     progressLog.taskStarted(currentTask.id, currentTask.title);
 
     const taskStartTime = Date.now();
-    let passed = false;
 
     for (let attempt = 1; attempt <= currentTask.maxAttempts; attempt++) {
       stateManager.updateTask(currentTask.id, { attempts: attempt });
-
-      // Get the latest task state (may have error from previous attempt)
       const latestTask = stateManager.getTask(currentTask.id)!;
       const isRetry = attempt > 1;
-
-      // Get recent completed tasks for context
       const recentTasks = getRecentCompleted(stateManager.getState().tasks, 3);
 
-      // Build prompt
       const prompt = buildPrompt({
         task: latestTask,
         prd,
@@ -157,7 +158,6 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
         projectRoot,
       });
 
-      // Execute agent
       const agentResult = await agent.execute({
         prompt,
         projectRoot,
@@ -166,7 +166,6 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
       });
 
       if (!agentResult.success && !agentResult.stdout) {
-        // Agent crashed without producing output
         const errorMsg = agentResult.stderr || 'Agent exited with error';
         stateManager.updateTask(latestTask.id, { error: errorMsg });
         progressLog.taskRetry(
@@ -186,7 +185,6 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
         continue;
       }
 
-      // Run validation
       const validationResult = await runValidationPipeline(prd.meta, latestTask, {
         steps: config.validationSteps,
         timeoutMs: config.validationTimeout,
@@ -214,7 +212,6 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
           durationMs,
         );
 
-        // Auto-commit
         if (config.autoCommit) {
           try {
             const commitMsg = `feat(${latestTask.id}): ${latestTask.title}`;
@@ -229,37 +226,180 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
           }
         }
 
-        passed = true;
-        break;
-      } else {
-        const errorSummary = validationResult.errors.join('\n\n');
-        const firstFailedStep = validationResult.results.find(
-          (r) => !r.passed,
-        );
-        const retryReason = firstFailedStep
-          ? `${firstFailedStep.step} errors`
-          : 'validation failed';
+        stateManager.setCurrentTask(null);
+        return;
+      }
 
-        stateManager.updateTask(latestTask.id, { error: errorSummary });
-        progressLog.taskRetry(
+      const errorSummary = validationResult.errors.join('\n\n');
+      const firstFailedStep = validationResult.results.find((r) => !r.passed);
+      const retryReason = firstFailedStep
+        ? `${firstFailedStep.step} errors`
+        : 'validation failed';
+
+      stateManager.updateTask(latestTask.id, { error: errorSummary });
+      progressLog.taskRetry(
+        latestTask.id,
+        attempt,
+        latestTask.maxAttempts,
+        retryReason,
+      );
+
+      if (attempt === latestTask.maxAttempts) {
+        stateManager.updateTask(latestTask.id, { status: 'failed' });
+        progressLog.taskFailed(
           latestTask.id,
-          attempt,
           latestTask.maxAttempts,
           retryReason,
         );
-
-        if (attempt === latestTask.maxAttempts) {
-          stateManager.updateTask(latestTask.id, { status: 'failed' });
-          progressLog.taskFailed(
-            latestTask.id,
-            latestTask.maxAttempts,
-            retryReason,
-          );
-        }
       }
     }
 
     stateManager.setCurrentTask(null);
+  }
+
+  async function executeReviewFixTasks(tasks: Task[]): Promise<void> {
+    for (const fixTask of tasks) {
+      progressLog.taskStarted(fixTask.id, fixTask.title);
+      const taskStartTime = Date.now();
+      let taskState: Task = { ...fixTask };
+      let passed = false;
+
+      for (let attempt = 1; attempt <= taskState.maxAttempts; attempt++) {
+        const isRetry = attempt > 1;
+        taskState = { ...taskState, attempts: attempt };
+        const recentTasks = getRecentCompleted(stateManager.getState().tasks, 3);
+
+        const prompt = buildPrompt({
+          task: taskState,
+          prd,
+          recentTasks,
+          isRetry,
+          contextBudget: config.contextBudget,
+          projectRoot,
+        });
+
+        const agentResult = await agent.execute({
+          prompt,
+          projectRoot,
+          verbose: config.verbose,
+          timeoutMs: config.taskTimeout,
+        });
+
+        if (!agentResult.success && !agentResult.stdout) {
+          const reason = agentResult.stderr || 'Agent exited with error';
+          progressLog.taskRetry(taskState.id, attempt, taskState.maxAttempts, reason);
+          taskState = { ...taskState, error: reason };
+          continue;
+        }
+
+        const validationResult = await runValidationPipeline(prd.meta, taskState, {
+          steps: config.validationSteps,
+          timeoutMs: config.validationTimeout,
+          projectRoot,
+        });
+
+        progressLog.taskValidation(
+          taskState.id,
+          validationResult.results.map((r) => ({
+            name: r.step,
+            passed: r.passed,
+          })),
+        );
+
+        if (validationResult.allPassed) {
+          const durationMs = Date.now() - taskStartTime;
+          progressLog.taskPassed(
+            taskState.id,
+            attempt,
+            taskState.maxAttempts,
+            durationMs,
+          );
+
+          if (config.autoCommit) {
+            const commitMsg = `fix(${taskState.id}): ${taskState.title}`;
+            try {
+              const sha = await stageAndCommit(commitMsg, { cwd: projectRoot });
+              if (sha) {
+                progressLog.taskCommitted(taskState.id, sha, commitMsg);
+              }
+            } catch (err) {
+              progressLog.error(
+                `Commit failed for ${taskState.id}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }
+
+          passed = true;
+          break;
+        }
+
+        const firstFailedStep = validationResult.results.find((r) => !r.passed);
+        const retryReason = firstFailedStep
+          ? `${firstFailedStep.step} errors`
+          : 'validation failed';
+        progressLog.taskRetry(taskState.id, attempt, taskState.maxAttempts, retryReason);
+      }
+
+      if (!passed) {
+        throw new Error(`Review fix task ${fixTask.id} failed`);
+      }
+    }
+  }
+
+  // Main execution loop
+  for (const taskSnapshot of orderedTasks) {
+    await executeStateTask(taskSnapshot);
+  }
+
+  if (config.agent === 'scarlet') {
+    const llmProvider = config.llm?.provider ?? 'anthropic';
+    const reviewModel = config.llm?.model;
+    const llmClient = createLLMClient(llmProvider, {
+      apiKey: undefined,
+      baseUrl: undefined,
+    });
+    const prdContent = readFileSync(prdFile, 'utf-8');
+    const acceptanceCriteria = collectAcceptanceCriteria(prd, prdContent);
+    const maxReviewCycles = 2;
+
+    for (let cycle = 1; cycle <= maxReviewCycles; cycle++) {
+      const diff = await getDiffAgainstBase({ cwd: projectRoot }, 'main');
+      const review = await runSelfReview({
+        prdContent,
+        acceptanceCriteria,
+        diff,
+        llmClient,
+        model: reviewModel,
+      });
+
+      const formatted = formatReviewForPR(review);
+      const reviewPath = persistReviewReport(projectRoot, formatted, cycle);
+      progressLog.info(
+        `[REVIEW] Cycle ${cycle}: approved=${review.approved}, fixes=${review.fixList.length}, report=${reviewPath}`,
+      );
+
+      if (review.approved) {
+        break;
+      }
+
+      if (cycle === maxReviewCycles) {
+        progressLog.error(
+          `[REVIEW] Not approved after ${maxReviewCycles} cycles; continuing with current result.`,
+        );
+        break;
+      }
+
+      const fixTasks = reviewFixesToTasks(review, cycle);
+      if (fixTasks.length === 0) {
+        progressLog.error('[REVIEW] Not approved but no fix tasks were produced.');
+        break;
+      }
+
+      progressLog.info(`[REVIEW] Running ${fixTasks.length} targeted fix tasks.`);
+      await executeReviewFixTasks(fixTasks);
+    }
+  } else {
+    progressLog.info('[REVIEW] Skipped (self-review currently runs with scarlet agent only).');
   }
 
   // Final summary
@@ -271,6 +411,45 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     summary.skipped,
     summary.total,
   );
+}
+
+function collectAcceptanceCriteria(prd: PRD, prdContent: string): string[] {
+  const criteria = new Set<string>();
+
+  for (const task of prd.tasks) {
+    for (const ac of task.acceptanceCriteria) {
+      if (ac.trim()) {
+        criteria.add(ac.trim());
+      }
+    }
+  }
+
+  const regex = /^[-*]\s*(?:\[[ xX]\]\s*)?(AC-\d+)\s*:\s*(.+)$/gim;
+  let match: RegExpExecArray | null;
+  // eslint-disable-next-line no-cond-assign
+  while ((match = regex.exec(prdContent)) !== null) {
+    if (match[1] && match[2]) {
+      criteria.add(`${match[1].toUpperCase()}: ${match[2].trim()}`);
+    }
+  }
+
+  return Array.from(criteria);
+}
+
+function persistReviewReport(
+  projectRoot: string,
+  markdown: string,
+  cycle: number,
+): string {
+  const stateDir = join(projectRoot, '.agentloop');
+  mkdirSync(stateDir, { recursive: true });
+
+  const cyclePath = join(stateDir, `review-cycle-${cycle}.md`);
+  writeFileSync(cyclePath, markdown, 'utf-8');
+
+  const latestPath = join(stateDir, 'review.md');
+  writeFileSync(latestPath, markdown, 'utf-8');
+  return latestPath;
 }
 
 /** Return the most recently completed tasks (by `completedAt`), newest first. */

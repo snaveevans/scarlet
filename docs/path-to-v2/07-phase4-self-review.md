@@ -98,11 +98,11 @@ Outputs markdown suitable for a PR body.
 
 ## Definition of Done
 
-- [ ] Self-review identifies AC satisfaction per criterion
-- [ ] Self-review flags scope creep
-- [ ] Self-review detects common code smells
-- [ ] Fix cycle re-runs executor with targeted tasks
-- [ ] Max 2 review cycles enforced
-- [ ] Review formatted as markdown for PR
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
+- [x] Self-review identifies AC satisfaction per criterion
+- [x] Self-review flags scope creep
+- [x] Self-review detects common code smells
+- [x] Fix cycle re-runs executor with targeted tasks
+- [x] Max 2 review cycles enforced
+- [x] Review formatted as markdown for PR
+- [x] All tests pass (261 total)
+- [x] `pnpm build` succeeds

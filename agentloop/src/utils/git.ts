@@ -74,6 +74,34 @@ export async function hasChanges(options: GitOptions): Promise<boolean> {
 }
 
 /**
+ * Get a textual diff from branch base to HEAD for review.
+ * Falls back to working-tree diff if base resolution fails.
+ */
+export async function getDiffAgainstBase(
+  options: GitOptions,
+  baseRef = 'main',
+): Promise<string> {
+  const mergeBase = await runShell('git', ['merge-base', 'HEAD', baseRef], options);
+  if (mergeBase.exitCode === 0) {
+    const baseSha = mergeBase.stdout.trim();
+    const diff = await runShell(
+      'git',
+      ['diff', '--no-color', `${baseSha}..HEAD`],
+      options,
+    );
+    if (diff.exitCode === 0) {
+      return diff.stdout;
+    }
+  }
+
+  const fallback = await runShell('git', ['diff', '--no-color', 'HEAD'], options);
+  if (fallback.exitCode !== 0) {
+    throw new Error(`git diff failed: ${fallback.stderr}`);
+  }
+  return fallback.stdout;
+}
+
+/**
  * Sanitize a PRD name for use as a branch name.
  */
 export function sanitizeBranchName(name: string): string {
