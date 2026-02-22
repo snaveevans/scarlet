@@ -88,10 +88,10 @@ After self-review passes:
 
 ## Definition of Done
 
-- [ ] Reflection extracts skills from successful patterns
-- [ ] Reflection extracts pitfalls from retried tasks
-- [ ] Deduplication prevents duplicate skills/pitfalls
-- [ ] Context.md regenerated after reflection
-- [ ] Knowledge persisted to `.scarlet/knowledge/`
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
+- [x] Reflection extracts skills from successful patterns
+- [x] Reflection extracts pitfalls from retried tasks
+- [x] Deduplication prevents duplicate skills/pitfalls
+- [x] Context.md regenerated after reflection
+- [x] Knowledge persisted to `.scarlet/knowledge/`
+- [x] All tests pass (282 total)
+- [x] `pnpm build` succeeds

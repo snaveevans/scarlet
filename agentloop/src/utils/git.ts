@@ -1,4 +1,4 @@
-import { runShell, runShellCommand } from './shell.js';
+import { runShell } from './shell.js';
 
 export interface GitOptions {
   cwd: string;
@@ -66,11 +66,64 @@ export async function getCurrentSha(options: GitOptions): Promise<string> {
 }
 
 /**
+ * Get the current branch name.
+ */
+export async function getCurrentBranch(options: GitOptions): Promise<string> {
+  const result = await runShell('git', ['rev-parse', '--abbrev-ref', 'HEAD'], options);
+  if (result.exitCode !== 0) {
+    throw new Error(`git rev-parse --abbrev-ref failed: ${result.stderr}`);
+  }
+
+  const branch = result.stdout.trim();
+  if (!branch) {
+    throw new Error('Could not determine current branch');
+  }
+  return branch;
+}
+
+/**
  * Check if the working tree has uncommitted changes.
  */
 export async function hasChanges(options: GitOptions): Promise<boolean> {
   const result = await runShell('git', ['status', '--porcelain'], options);
   return result.exitCode === 0 && result.stdout.trim().length > 0;
+}
+
+/**
+ * Push a branch to origin.
+ */
+export async function pushBranch(
+  branchName: string,
+  options: GitOptions,
+): Promise<void> {
+  const push = await runShell(
+    'git',
+    ['push', '--set-upstream', 'origin', branchName],
+    options,
+  );
+  if (push.exitCode !== 0) {
+    throw new Error(`git push failed: ${push.stderr || push.stdout}`);
+  }
+}
+
+/**
+ * Create a pull request with GitHub CLI and return its URL.
+ */
+export async function createPullRequest(
+  title: string,
+  body: string,
+  options: GitOptions,
+): Promise<string> {
+  const result = await runShell(
+    'gh',
+    ['pr', 'create', '--title', title, '--body', body],
+    options,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(`gh pr create failed: ${result.stderr || result.stdout}`);
+  }
+
+  return result.stdout.trim();
 }
 
 /**

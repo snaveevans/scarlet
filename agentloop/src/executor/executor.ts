@@ -1,16 +1,21 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { resolveExecutionOrder, hasFailedDependency } from '../planner/dependency-graph.js';
 import { runValidationPipeline } from '../validator/validator.js';
 import { buildPrompt } from '../utils/context-builder.js';
 import { createLLMClient } from '../llm/providers.js';
 import {
+  createPullRequest,
   stageAndCommit,
   createAndCheckoutBranch,
+  getCurrentBranch,
+  pushBranch,
   sanitizeBranchName,
   getDiffAgainstBase,
 } from '../utils/git.js';
+import { FileKnowledgeStore } from '../knowledge/file-store.js';
 import { runScaffold } from '../scaffold/index.js';
+import { runReflection } from '../reflection/index.js';
 import {
   formatReviewForPR,
   reviewFixesToTasks,
@@ -20,6 +25,8 @@ import { StateManager } from '../state/state-manager.js';
 import { ProgressLog } from '../state/progress-log.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import type { PRD, AgentLoopConfig, Task } from '../types.js';
+import type { ReflectionResult } from '../reflection/index.js';
+import type { ImplementationPlan } from '../comprehension/types.js';
 
 /** Everything the executor needs to run a full PRD. */
 export interface ExecutorOptions {
@@ -361,6 +368,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     const prdContent = readFileSync(prdFile, 'utf-8');
     const acceptanceCriteria = collectAcceptanceCriteria(prd, prdContent);
     const maxReviewCycles = 2;
+    let reviewApproved = false;
 
     for (let cycle = 1; cycle <= maxReviewCycles; cycle++) {
       const diff = await getDiffAgainstBase({ cwd: projectRoot }, 'main');
@@ -379,6 +387,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
       );
 
       if (review.approved) {
+        reviewApproved = true;
         break;
       }
 
@@ -398,8 +407,67 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
       progressLog.info(`[REVIEW] Running ${fixTasks.length} targeted fix tasks.`);
       await executeReviewFixTasks(fixTasks);
     }
+
+    if (reviewApproved) {
+      const reflectionDiff = await getDiffAgainstBase({ cwd: projectRoot }, 'main');
+      const progressLogPath = join(projectRoot, '.agentloop', 'progress.log');
+      const progressLogContent = existsSync(progressLogPath)
+        ? readFileSync(progressLogPath, 'utf-8')
+        : '';
+      const reflectionPlan = buildReflectionPlan(stateManager.getState().tasks);
+      const knowledgeStore = new FileKnowledgeStore(projectRoot);
+
+      const reflection = await runReflection({
+        prdName: prd.projectName,
+        projectRoot,
+        tasks: stateManager.getState().tasks,
+        plan: reflectionPlan,
+        diff: reflectionDiff,
+        progressLog: progressLogContent,
+        llmClient,
+        knowledgeStore,
+        model: reviewModel,
+      });
+
+      progressLog.info(
+        `[REFLECTION] skills=${reflection.skillsExtracted.length}, pitfalls=${reflection.pitfallsExtracted.length}, tools=${reflection.toolCandidates.length}, context=${reflection.contextPath}`,
+      );
+
+      if (config.autoCommit) {
+        try {
+          const commitMsg = 'chore(reflection): persist learned knowledge';
+          const sha = await stageAndCommit(commitMsg, { cwd: projectRoot });
+          if (sha) {
+            progressLog.info(`[REFLECTION] COMMITTED: ${sha.slice(0, 7)} "${commitMsg}"`);
+          }
+        } catch (err) {
+          progressLog.error(
+            `[REFLECTION] Commit failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        try {
+          const branch = await getCurrentBranch({ cwd: projectRoot });
+          await pushBranch(branch, { cwd: projectRoot });
+          const prBody = buildPullRequestBody(prd, reflection);
+          const prUrl = await createPullRequest(
+            `feat: ${prd.projectName}`,
+            prBody,
+            { cwd: projectRoot },
+          );
+          progressLog.info(`[PR] Created: ${prUrl || '(no URL returned)'}`);
+        } catch (err) {
+          progressLog.error(
+            `[PR] Push or PR creation failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    } else {
+      progressLog.info('[REFLECTION] Skipped because self-review was not approved.');
+    }
   } else {
     progressLog.info('[REVIEW] Skipped (self-review currently runs with scarlet agent only).');
+    progressLog.info('[REFLECTION] Skipped (reflection currently runs with scarlet agent only).');
   }
 
   // Final summary
@@ -450,6 +518,67 @@ function persistReviewReport(
   const latestPath = join(stateDir, 'review.md');
   writeFileSync(latestPath, markdown, 'utf-8');
   return latestPath;
+}
+
+function buildPullRequestBody(prd: PRD, reflection: ReflectionResult): string {
+  const lines: string[] = [];
+  lines.push(`## ${prd.projectName}`);
+  lines.push('');
+  lines.push('Automated PR generated by AgentLoop.');
+  lines.push('');
+  lines.push('### Reflection Summary');
+  lines.push(`- Skills extracted: ${reflection.skillsExtracted.length}`);
+  lines.push(`- Pitfalls extracted: ${reflection.pitfallsExtracted.length}`);
+  lines.push(`- Tool candidates: ${reflection.toolCandidates.length}`);
+  lines.push(`- Context file: \`${reflection.contextPath}\``);
+
+  if (reflection.toolCandidates.length > 0) {
+    lines.push('');
+    lines.push('### Tool Candidates');
+    for (const candidate of reflection.toolCandidates) {
+      lines.push(`- ${candidate}`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildReflectionPlan(tasks: Task[]): ImplementationPlan {
+  const acToTasks = new Map<string, string[]>();
+  const plannedTasks: ImplementationPlan['tasks'] = tasks.map((task) => {
+    for (const ac of task.acceptanceCriteria) {
+      const key = ac.trim();
+      if (!key) continue;
+      const coveredBy = acToTasks.get(key) ?? [];
+      coveredBy.push(task.id);
+      acToTasks.set(key, coveredBy);
+    }
+
+    return {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      satisfiesAC: task.acceptanceCriteria,
+      dependsOn: task.depends,
+      filesToCreate: [],
+      filesToModify: task.files,
+      tests: task.tests.map((file) => ({
+        file,
+        description: `Validation coverage for ${task.id}`,
+      })),
+      complexity: 'medium',
+      risks: task.error ? [task.error] : [],
+    };
+  });
+
+  return {
+    tasks: plannedTasks,
+    acCoverage: Array.from(acToTasks.entries()).map(([ac, coveredByTasks]) => ({
+      ac,
+      coveredByTasks,
+    })),
+    decisions: [],
+  };
 }
 
 /** Return the most recently completed tasks (by `completedAt`), newest first. */

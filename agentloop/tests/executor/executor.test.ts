@@ -17,6 +17,9 @@ vi.mock('../../src/validator/validator.js', () => ({
 vi.mock('../../src/utils/git.js', () => ({
   createAndCheckoutBranch: vi.fn().mockResolvedValue(undefined),
   stageAndCommit: vi.fn().mockResolvedValue('abc1234'),
+  getCurrentBranch: vi.fn().mockResolvedValue('agentloop/test-project'),
+  pushBranch: vi.fn().mockResolvedValue(undefined),
+  createPullRequest: vi.fn().mockResolvedValue('https://github.com/org/repo/pull/1'),
   sanitizeBranchName: vi.fn((name: string) => name.toLowerCase().replace(/\s+/g, '-')),
   getDiffAgainstBase: vi.fn().mockResolvedValue('diff content'),
 }));
@@ -48,6 +51,16 @@ vi.mock('../../src/review/index.js', () => ({
   formatReviewForPR: vi.fn().mockReturnValue('review markdown'),
 }));
 
+vi.mock('../../src/reflection/index.js', () => ({
+  runReflection: vi.fn().mockResolvedValue({
+    skillsExtracted: [],
+    pitfallsExtracted: [],
+    toolCandidates: [],
+    contextUpdates: [],
+    contextPath: '/tmp/.scarlet/context.md',
+  }),
+}));
+
 import { runValidationPipeline } from '../../src/validator/validator.js';
 import { runScaffold } from '../../src/scaffold/index.js';
 import { createLLMClient } from '../../src/llm/providers.js';
@@ -56,6 +69,7 @@ import {
   reviewFixesToTasks,
   formatReviewForPR,
 } from '../../src/review/index.js';
+import { runReflection } from '../../src/reflection/index.js';
 
 const mockPRD: PRD = {
   projectName: 'Test Project',
@@ -149,6 +163,13 @@ describe('runLoop', () => {
     });
     vi.mocked(reviewFixesToTasks).mockReturnValue([]);
     vi.mocked(formatReviewForPR).mockReturnValue('review markdown');
+    vi.mocked(runReflection).mockResolvedValue({
+      skillsExtracted: [],
+      pitfallsExtracted: [],
+      toolCandidates: [],
+      contextUpdates: [],
+      contextPath: join(tmpDir, '.scarlet', 'context.md'),
+    });
   });
 
   afterEach(() => {
@@ -311,6 +332,7 @@ describe('runLoop', () => {
 
     expect(runSelfReview).toHaveBeenCalledTimes(2);
     expect(reviewFixesToTasks).toHaveBeenCalledTimes(1);
+    expect(runReflection).toHaveBeenCalledTimes(1);
   });
 
   it('enforces max two self-review cycles', async () => {
@@ -357,5 +379,6 @@ describe('runLoop', () => {
     });
 
     expect(runSelfReview).toHaveBeenCalledTimes(2);
+    expect(runReflection).not.toHaveBeenCalled();
   });
 });
