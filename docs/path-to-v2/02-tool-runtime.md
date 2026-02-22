@@ -149,9 +149,27 @@ All tests use temp directories with fixture files. No real project modification.
 
 ## Definition of Done
 
-- [ ] All 7 core tools implemented with input validation
-- [ ] Tool registry registers, lists, and dispatches
-- [ ] Path safety enforced — traversal tests fail as expected
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
-- [ ] Existing tests still pass
+- [x] All 7 core tools implemented with input validation
+- [x] Tool registry registers, lists, and dispatches
+- [x] Path safety enforced — traversal tests fail as expected
+- [x] All tests pass (55 new tests, 129 total)
+- [x] `pnpm build` succeeds
+- [x] Existing tests still pass (0 regressions)
+
+## Files Created
+
+- `src/tools/types.ts` — ToolHandler, ToolContext, ToolRegistry interfaces, safePath()
+- `src/tools/registry.ts` — DefaultToolRegistry implementation
+- `src/tools/read-file.ts` — read_file tool
+- `src/tools/write-file.ts` — write_file tool
+- `src/tools/edit-file.ts` — edit_file tool
+- `src/tools/list-directory.ts` — list_directory tool
+- `src/tools/search-files.ts` — search_files tool (rg with grep fallback)
+- `src/tools/find-files.ts` — find_files tool (recursive glob)
+- `src/tools/shell-tool.ts` — shell tool (wraps utils/shell.ts)
+- `src/tools/index.ts` — createCoreToolRegistry() convenience function
+- `tests/tools/registry.test.ts` — 7 tests
+- `tests/tools/filesystem.test.ts` — 20 tests
+- `tests/tools/search-and-find.test.ts` — 14 tests
+- `tests/tools/shell-tool.test.ts` — 5 tests
+- `tests/tools/path-safety.test.ts` — 9 tests
