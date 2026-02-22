@@ -12,7 +12,6 @@ import { StateManager } from './state/state-manager.js';
 import { ProgressLog } from './state/progress-log.js';
 import { loadConfig } from './config.js';
 import { runLoop } from './executor/executor.js';
-import { OpenCodeAdapter } from './executor/opencode-adapter.js';
 import { ScarletAdapter } from './executor/scarlet-adapter.js';
 import { createLLMClient } from './llm/providers.js';
 import { resolveModel } from './llm/routing.js';
@@ -50,7 +49,7 @@ program
     '--validation-steps <steps>',
     'Comma-separated validation pipeline (typecheck,lint,test,build)',
   )
-  .option('--agent <name>', 'Coding agent adapter to use', 'opencode')
+  .option('--agent <name>', 'Coding agent implementation to use', 'scarlet')
   .option('--dry-run', 'Parse PRD and show execution plan without running')
   .option('--comprehend', 'Run comprehension phase to generate tasks from AC')
   .option('--context-budget <n>', 'Approx token budget per task', parseInt)
@@ -480,28 +479,24 @@ function buildCliOverrides(
 }
 
 function resolveAgent(agentName: string, config: AgentLoopConfig) {
-  switch (agentName) {
-    case 'scarlet': {
-      const codeRoute = resolveModel(config.modelRouting, 'code', 'medium');
-      const llmClient = createLLMClient(codeRoute.provider, {
-        apiKey: undefined,       // read from env
-        baseUrl: undefined,
-      });
-      const tools = createCoreToolRegistry();
-      return new ScarletAdapter({
-        llmClient,
-        tools,
-        model: codeRoute.model,
-        maxTokens: codeRoute.maxTokens,
-        temperature: codeRoute.temperature,
-      });
-    }
-    case 'opencode':
-      return new OpenCodeAdapter();
-    default:
-      console.error(`Unknown agent: ${agentName}. Available: scarlet, opencode`);
-      process.exit(1);
+  if (agentName !== 'scarlet') {
+    console.error(`Unknown agent: ${agentName}. Available: scarlet`);
+    process.exit(1);
   }
+
+  const codeRoute = resolveModel(config.modelRouting, 'code', 'medium');
+  const llmClient = createLLMClient(codeRoute.provider, {
+    apiKey: undefined,       // read from env
+    baseUrl: undefined,
+  });
+  const tools = createCoreToolRegistry();
+  return new ScarletAdapter({
+    llmClient,
+    tools,
+    model: codeRoute.model,
+    maxTokens: codeRoute.maxTokens,
+    temperature: codeRoute.temperature,
+  });
 }
 
 function formatRow(cells: string[], widths: number[]): string {

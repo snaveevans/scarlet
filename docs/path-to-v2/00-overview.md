@@ -29,7 +29,11 @@ The hard infrastructure problems (atomic state, crash recovery, topo sort, fail-
 | 9 | [09-phase5-reflection.md](./09-phase5-reflection.md) | Post-run knowledge extraction | Phases 7+8 | **DONE** |
 | 10 | [10-model-routing.md](./10-model-routing.md) | Per-phase model selection | Phase 3 | **DONE** |
 | 11 | [11-memory-manager.md](./11-memory-manager.md) | Layered context management | Phase 3 | **DONE** |
-| 12 | [12-cleanup-and-docs.md](./12-cleanup-and-docs.md) | Remove legacy code, final documentation | All phases |
+| 12 | [12-cleanup-and-docs.md](./12-cleanup-and-docs.md) | Remove legacy code, final documentation | All phases | **DONE** |
+
+## Status
+
+All 12 phases are complete.
 
 ## Dependency Graph
 

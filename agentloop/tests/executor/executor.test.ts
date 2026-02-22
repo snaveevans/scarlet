@@ -111,7 +111,7 @@ const mockPRD: PRD = {
 };
 
 const mockConfig: AgentLoopConfig = {
-  agent: 'opencode',
+  agent: 'mock',
   maxAttempts: 3,
   autoCommit: false,
   skipFailedDeps: true,

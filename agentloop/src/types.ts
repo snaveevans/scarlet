@@ -67,8 +67,8 @@ export const LLMConfig = z.object({
 export type LLMConfig = z.infer<typeof LLMConfig>;
 
 export const AgentLoopConfig = z.object({
-  /** Agent adapter name (`"scarlet"` for native agent, `"opencode"` for legacy). */
-  agent: z.string().default('opencode'),
+  /** Agent implementation name (`"scarlet"`). */
+  agent: z.string().default('scarlet'),
   /** Max retry attempts per task before marking it `failed`. */
   maxAttempts: z.number().int().positive().default(3),
   /** Whether to `git commit` after each passing task. */

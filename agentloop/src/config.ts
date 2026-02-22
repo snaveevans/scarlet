@@ -14,7 +14,7 @@ const CONFIG_FILE = '.agentloop/config.json';
 
 /** Built-in defaults. Lowest precedence — overridden by file then CLI. */
 const DEFAULTS: AgentLoopConfigType = {
-  agent: 'opencode',
+  agent: 'scarlet',
   maxAttempts: 3,
   autoCommit: true,
   skipFailedDeps: true,

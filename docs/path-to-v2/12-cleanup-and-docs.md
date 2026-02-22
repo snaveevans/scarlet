@@ -36,6 +36,8 @@ Decide: keep v1 PRD support or drop it?
 
 **Recommendation:** Keep v1 for now. It's useful for simple tasks where you want to specify tasks directly. Drop it later if it becomes a maintenance burden.
 
+Decision taken in Phase 12: **keep v1 support (legacy)**.
+
 ### 12.3 — Remove Legacy Root-Level Code
 
 Evaluate whether root-level scripts and tests are still needed:
@@ -193,15 +195,19 @@ Ensure `.scarlet/runs/` (execution logs) is gitignored but `.scarlet/knowledge/`
 - Run `pnpm build` — clean build
 - Manual smoke test: v2 PRD → comprehension → scaffold → implement → review → reflect → knowledge saved
 
+Current status:
+- Automated suite (`pnpm typecheck && pnpm test && pnpm build`, plus root `npm test`) passes.
+- End-to-end manual smoke remains environment-dependent (requires live LLM API/network access).
+
 ## Definition of Done
 
-- [ ] OpenCode adapter removed
-- [ ] Unused dependencies removed
-- [ ] Legacy root-level scripts evaluated and cleaned
-- [ ] Directory structure matches final layout
-- [ ] README.md comprehensive and accurate
-- [ ] Architecture doc written
-- [ ] .gitignore updated
-- [ ] Full test suite passes
-- [ ] Clean build
+- [x] OpenCode adapter removed
+- [x] Unused dependencies removed
+- [x] Legacy root-level scripts evaluated and cleaned
+- [x] Directory structure matches final layout
+- [x] README.md comprehensive and accurate
+- [x] Architecture doc written
+- [x] .gitignore updated
+- [x] Full test suite passes
+- [x] Clean build
 - [ ] Manual smoke test passes end-to-end
