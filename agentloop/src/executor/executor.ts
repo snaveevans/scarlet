@@ -8,8 +8,10 @@ import { ProgressLog } from '../state/progress-log.js';
 import type { AgentAdapter } from './agent-adapter.js';
 import type { PRD, AgentLoopConfig, Task } from '../types.js';
 
+/** Everything the executor needs to run a full PRD. */
 export interface ExecutorOptions {
   prd: PRD;
+  /** Absolute path to the PRD file (stored in state for `resume`). */
   prdFile: string;
   config: AgentLoopConfig;
   agent: AgentAdapter;
@@ -17,6 +19,21 @@ export interface ExecutorOptions {
   progressLog: ProgressLog;
 }
 
+/**
+ * Core execution loop — processes every task in dependency order.
+ *
+ * For each task the loop:
+ * 1. Checks dependency status and skips if a dependency failed.
+ * 2. Builds a context-aware prompt ({@link buildPrompt}).
+ * 3. Sends the prompt to the agent adapter.
+ * 4. Runs the validation pipeline (typecheck → lint → test → build).
+ * 5. On success: marks the task `passed` and optionally commits.
+ *    On failure: retries up to `maxAttempts`, injecting the previous error
+ *    output into the next prompt so the agent can self-correct.
+ *
+ * State is persisted to disk after every mutation so that an interrupted
+ * run can be resumed with `agentloop resume`.
+ */
 export async function runLoop(options: ExecutorOptions): Promise<void> {
   const { prd, prdFile, config, agent, stateManager, progressLog } = options;
 
@@ -220,6 +237,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
   );
 }
 
+/** Return the most recently completed tasks (by `completedAt`), newest first. */
 function getRecentCompleted(tasks: Task[], count: number): Task[] {
   return tasks
     .filter((t) => t.status === 'passed' && t.completedAt)
@@ -231,11 +249,12 @@ function getRecentCompleted(tasks: Task[], count: number): Task[] {
     .slice(0, count);
 }
 
+/** Count independent dependency chains (tasks with no dependencies are chain roots). */
 function countDependencyChains(tasks: Task[]): number {
-  // Count tasks with no dependencies (roots of chains)
   return tasks.filter((t) => t.depends.length === 0).length;
 }
 
+/** Print a human-readable execution plan to stdout (used by `--dry-run`). */
 function printExecutionPlan(tasks: Task[]): void {
   console.log('\n=== Execution Plan (dry run) ===\n');
   for (let i = 0; i < tasks.length; i++) {
