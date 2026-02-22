@@ -1,10 +1,20 @@
 import { basename } from 'node:path';
 import type { Task } from '../prd/schemas.js';
+import { LayeredMemoryManager, messagesToPrompt } from '../memory/index.js';
+
+export interface ScaffoldPromptOptions {
+  projectRoot?: string | undefined;
+  maxTokens?: number | undefined;
+  projectContext?: string | undefined;
+}
 
 /**
  * Build a scaffold-focused prompt for agent-driven scaffolding workflows.
  */
-export function buildScaffoldPrompt(tasks: Task[]): string {
+export function buildScaffoldPrompt(
+  tasks: Task[],
+  options: ScaffoldPromptOptions = {},
+): string {
   const lines: string[] = [
     'Create a project scaffold from the implementation tasks below.',
     '',
@@ -38,5 +48,17 @@ export function buildScaffoldPrompt(tasks: Task[]): string {
     }
   }
 
-  return lines.join('\n');
+  const memory = new LayeredMemoryManager({
+    maxTokens: options.maxTokens ?? 4096,
+    projectRoot: options.projectRoot ?? process.cwd(),
+  });
+  memory.setPhaseContext('scaffold', 'Create project stubs for planned files and tests.');
+  memory.setTaskPlan(lines.join('\n'));
+  if (options.projectContext) {
+    memory.setProjectContext(options.projectContext);
+  }
+
+  return messagesToPrompt(
+    memory.buildMessages('Generate scaffold output only (no business logic).'),
+  );
 }

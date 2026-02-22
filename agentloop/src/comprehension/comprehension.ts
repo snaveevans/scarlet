@@ -84,6 +84,7 @@ export async function runComprehension(
       input,
       understanding,
       llmClient,
+      projectRoot,
       model: decomposeModel,
       maxTokens: decomposeMaxTokens,
       temperature: decomposeTemperature,

@@ -4,6 +4,7 @@ import { runShellCommand } from '../utils/shell.js';
 import type { Task, PRDMeta } from '../prd/schemas.js';
 import type { LLMClient } from '../llm/client.js';
 import type { ToolRegistry } from '../tools/types.js';
+import { buildScaffoldPrompt } from './prompts.js';
 
 export interface ScaffoldOptions {
   /** Tasks to scaffold files/tests for. */
@@ -30,6 +31,12 @@ export async function runScaffold(
   options: ScaffoldOptions,
 ): Promise<ScaffoldResult> {
   const { tasks, projectRoot, meta } = options;
+  const scaffoldPrompt = buildScaffoldPrompt(tasks, {
+    projectRoot,
+    maxTokens: 4096,
+    projectContext: `Tech stack: ${meta.techStack}`,
+  });
+  void scaffoldPrompt;
 
   const filesCreated: string[] = [];
   const testsCreated: string[] = [];

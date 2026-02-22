@@ -8,6 +8,7 @@
 import type { LLMClient } from '../llm/client.js';
 import type { ToolRegistry } from '../tools/types.js';
 import { DefaultToolRegistry } from '../tools/registry.js';
+import { LayeredMemoryManager, messagesToPrompt } from '../memory/index.js';
 import { runAgent } from '../agent/agent.js';
 import { CodebaseUnderstandingSchema } from './types.js';
 import type { CodebaseUnderstanding, ComprehensionInput } from './types.js';
@@ -109,9 +110,21 @@ ${input.notes ? `Notes:\n${input.notes}` : ''}
 
 Explore the codebase to understand its structure, conventions, and any existing code relevant to this feature.`;
 
+  const memory = new LayeredMemoryManager({
+    maxTokens: maxTokens ?? 8192,
+    projectRoot,
+  });
+  memory.setPhaseContext('explore', input.name);
+  memory.setTaskPlan(userPrompt);
+  const prompt = messagesToPrompt(
+    memory.buildMessages(
+      'Use tools as needed, then return ONLY the required JSON structure.',
+    ),
+  );
+
   const result = await runAgent({
     systemPrompt: EXPLORE_SYSTEM_PROMPT,
-    userPrompt,
+    userPrompt: prompt,
     tools: readOnlyTools,
     llmClient,
     projectRoot,

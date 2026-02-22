@@ -114,10 +114,10 @@ When the session layer grows beyond its budget (e.g., after 10+ tasks), compress
 
 ## Definition of Done
 
-- [ ] Memory manager builds messages with layered context
-- [ ] Token budget enforced — layers trimmed by priority
-- [ ] Session summarization compresses long runs
-- [ ] Context builder fully replaced
-- [ ] All callers updated to use memory manager
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
+- [x] Memory manager builds messages with layered context
+- [x] Token budget enforced — layers trimmed by priority
+- [x] Session summarization compresses long runs
+- [x] Context builder fully replaced
+- [x] All callers updated to use memory manager
+- [x] All tests pass (294 total)
+- [x] `pnpm build` succeeds

@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { resolveExecutionOrder, hasFailedDependency } from '../planner/dependency-graph.js';
 import { runValidationPipeline } from '../validator/validator.js';
-import { buildPrompt } from '../utils/context-builder.js';
 import { resolveModel, type TaskComplexity } from '../llm/routing.js';
 import { createLLMClient } from '../llm/providers.js';
+import { LayeredMemoryManager, messagesToPrompt } from '../memory/index.js';
 import {
   createPullRequest,
   stageAndCommit,
@@ -40,12 +40,24 @@ export interface ExecutorOptions {
   progressLog: ProgressLog;
 }
 
+const EXECUTION_SYSTEM_CONTEXT = [
+  'You are implementing a task in an existing codebase.',
+  'Implement only what is required for the current task.',
+  'Do not broaden scope or perform unrelated refactors.',
+].join('\n');
+
+const TASK_EXECUTION_USER_PROMPT = [
+  'Implement the current task using the provided layered context.',
+  'Meet all acceptance criteria and update tests as required.',
+  'Return a concise summary of what changed.',
+].join('\n');
+
 /**
  * Core execution loop — processes every task in dependency order.
  *
  * For each task the loop:
  * 1. Checks dependency status and skips if a dependency failed.
- * 2. Builds a context-aware prompt ({@link buildPrompt}).
+ * 2. Builds layered context through the memory manager.
  * 3. Sends the prompt to the agent adapter.
  * 4. Runs the validation pipeline (typecheck → lint → test → build).
  * 5. On success: marks the task `passed` and optionally commits.
@@ -76,6 +88,20 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
   // Count dependency chains
   const chainCount = countDependencyChains(orderedTasks);
   progressLog.prdLoaded(orderedTasks.length, chainCount);
+
+  const contextPath = join(projectRoot, '.scarlet', 'context.md');
+  const contextMd = existsSync(contextPath)
+    ? readFileSync(contextPath, 'utf-8')
+    : '';
+  const memoryManager = new LayeredMemoryManager({
+    maxTokens: config.contextBudget,
+    projectRoot,
+    contextMd,
+  });
+  memoryManager.setSystemContext(EXECUTION_SYSTEM_CONTEXT);
+  memoryManager.setProjectContext(buildProjectContext(prd, contextMd));
+  hydrateSessionMemory(memoryManager, state.tasks);
+  const promptKnowledgeStore = new FileKnowledgeStore(projectRoot);
 
   // Set up git branch if auto-commit is enabled
   if (config.autoCommit && !config.dryRun) {
@@ -142,6 +168,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     if (hasFailedDependency(currentTask, allTasks) && config.skipFailedDeps) {
       stateManager.updateTask(currentTask.id, { status: 'skipped' });
       progressLog.taskSkipped(currentTask.id, 'dependency failed');
+      memoryManager.addCompletedTask(currentTask.id, currentTask.title, 'skipped');
       return;
     }
 
@@ -157,13 +184,15 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
       const isRetry = attempt > 1;
       const recentTasks = getRecentCompleted(stateManager.getState().tasks, 3);
 
-      const prompt = buildPrompt({
+      const prompt = buildTaskPrompt({
+        memoryManager,
         task: latestTask,
         prd,
         recentTasks,
         isRetry,
-        contextBudget: config.contextBudget,
         projectRoot,
+        knowledgeStore: promptKnowledgeStore,
+        phase: 'code',
       });
       const codeModel = resolveModel(
         config.modelRouting,
@@ -197,6 +226,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
             error: errorMsg,
           });
           progressLog.taskFailed(latestTask.id, latestTask.maxAttempts, errorMsg);
+          memoryManager.addCompletedTask(latestTask.id, latestTask.title, 'failed');
         }
         continue;
       }
@@ -242,6 +272,10 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
           }
         }
 
+        memoryManager.addCompletedTask(latestTask.id, latestTask.title, 'passed');
+        for (const file of latestTask.files) {
+          memoryManager.addModifiedFile(file);
+        }
         stateManager.setCurrentTask(null);
         return;
       }
@@ -267,6 +301,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
           latestTask.maxAttempts,
           retryReason,
         );
+        memoryManager.addCompletedTask(latestTask.id, latestTask.title, 'failed');
       }
     }
 
@@ -285,13 +320,15 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
         taskState = { ...taskState, attempts: attempt };
         const recentTasks = getRecentCompleted(stateManager.getState().tasks, 3);
 
-        const prompt = buildPrompt({
+        const prompt = buildTaskPrompt({
+          memoryManager,
           task: taskState,
           prd,
           recentTasks,
           isRetry,
-          contextBudget: config.contextBudget,
           projectRoot,
+          knowledgeStore: promptKnowledgeStore,
+          phase: 'review-fix',
         });
         const codeModel = resolveModel(
           config.modelRouting,
@@ -353,6 +390,10 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
             }
           }
 
+          memoryManager.addCompletedTask(taskState.id, taskState.title, 'passed');
+          for (const file of taskState.files) {
+            memoryManager.addModifiedFile(file);
+          }
           passed = true;
           break;
         }
@@ -365,6 +406,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
       }
 
       if (!passed) {
+        memoryManager.addCompletedTask(fixTask.id, fixTask.title, 'failed');
         throw new Error(`Review fix task ${fixTask.id} failed`);
       }
     }
@@ -546,6 +588,136 @@ function persistReviewReport(
   const latestPath = join(stateDir, 'review.md');
   writeFileSync(latestPath, markdown, 'utf-8');
   return latestPath;
+}
+
+interface BuildTaskPromptOptions {
+  memoryManager: LayeredMemoryManager;
+  task: Task;
+  prd: PRD;
+  recentTasks: Task[];
+  isRetry: boolean;
+  projectRoot: string;
+  knowledgeStore: FileKnowledgeStore;
+  phase: string;
+}
+
+function buildTaskPrompt(options: BuildTaskPromptOptions): string {
+  const {
+    memoryManager,
+    task,
+    prd,
+    recentTasks,
+    isRetry,
+    projectRoot,
+    knowledgeStore,
+    phase,
+  } = options;
+
+  memoryManager.clearTaskScope();
+  memoryManager.setPhaseContext(phase, `${task.id}: ${task.title}`);
+  memoryManager.setTaskPlan(formatTaskPlan(task, prd, recentTasks));
+  memoryManager.setFileContents(loadTaskFiles(task.files, projectRoot));
+
+  const knowledgeQuery = [task.title, task.description, ...task.acceptanceCriteria].join(' ');
+  memoryManager.setMatchedKnowledge(
+    knowledgeStore.querySkills(knowledgeQuery, 4),
+    knowledgeStore.queryPitfalls(knowledgeQuery, 4),
+  );
+
+  if (isRetry && task.error) {
+    memoryManager.setPreviousError(task.error);
+  }
+
+  const messages = memoryManager.buildMessages(TASK_EXECUTION_USER_PROMPT);
+  return messagesToPrompt(messages);
+}
+
+function buildProjectContext(prd: PRD, contextMd: string): string {
+  const sections = [
+    `Project: ${prd.projectName}`,
+    `Tech stack: ${prd.meta.techStack}`,
+    '',
+    'PRD Context:',
+    prd.context || '(none)',
+  ];
+
+  if (contextMd.trim()) {
+    sections.push('', 'Knowledge Context (.scarlet/context.md):', contextMd.trim());
+  }
+
+  return sections.join('\n');
+}
+
+function hydrateSessionMemory(memoryManager: LayeredMemoryManager, tasks: Task[]): void {
+  for (const task of tasks) {
+    if (task.status === 'pending' || task.status === 'in_progress') {
+      continue;
+    }
+    memoryManager.addCompletedTask(task.id, task.title, task.status);
+    if (task.status === 'passed') {
+      for (const file of task.files) {
+        memoryManager.addModifiedFile(file);
+      }
+    }
+    if (task.error) {
+      memoryManager.addDecision(`${task.id}: ${task.error}`);
+    }
+  }
+}
+
+function loadTaskFiles(
+  filePaths: string[],
+  projectRoot: string,
+): { path: string; content: string }[] {
+  const loaded: { path: string; content: string }[] = [];
+  for (const filePath of filePaths) {
+    const fullPath = join(projectRoot, filePath);
+    if (!existsSync(fullPath)) continue;
+    try {
+      loaded.push({
+        path: filePath,
+        content: readFileSync(fullPath, 'utf-8'),
+      });
+    } catch {
+      // Skip unreadable files.
+    }
+  }
+  return loaded;
+}
+
+function formatTaskPlan(task: Task, prd: PRD, recentTasks: Task[]): string {
+  const lines: string[] = [];
+  lines.push(`Task: ${task.id} — ${task.title}`);
+  lines.push(task.description);
+  lines.push('');
+  lines.push(`Project context: ${prd.context || '(none)'}`);
+  lines.push(`Tech stack: ${prd.meta.techStack}`);
+
+  if (task.files.length > 0) {
+    lines.push('', 'Files:', ...task.files.map((file) => `- ${file}`));
+  }
+
+  if (task.acceptanceCriteria.length > 0) {
+    lines.push(
+      '',
+      'Acceptance Criteria:',
+      ...task.acceptanceCriteria.map((item) => `- ${item}`),
+    );
+  }
+
+  if (task.tests.length > 0) {
+    lines.push('', 'Tests:', ...task.tests.map((test) => `- ${test}`));
+  }
+
+  if (recentTasks.length > 0) {
+    lines.push(
+      '',
+      'Recently Completed:',
+      ...recentTasks.map((recent) => `- ${recent.id}: ${recent.title}`),
+    );
+  }
+
+  return lines.join('\n');
 }
 
 function buildPullRequestBody(prd: PRD, reflection: ReflectionResult): string {

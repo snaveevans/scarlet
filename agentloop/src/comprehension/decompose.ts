@@ -6,6 +6,7 @@
  */
 
 import type { LLMClient } from '../llm/client.js';
+import { LayeredMemoryManager, messagesToPrompt } from '../memory/index.js';
 import { ImplementationPlanSchema } from './types.js';
 import type {
   CodebaseUnderstanding,
@@ -17,6 +18,7 @@ export interface DecomposeOptions {
   input: ComprehensionInput;
   understanding: CodebaseUnderstanding;
   llmClient: LLMClient;
+  projectRoot?: string | undefined;
   model?: string | undefined;
   maxTokens?: number | undefined;
   temperature?: number | undefined;
@@ -75,13 +77,25 @@ export async function runDecompose(
     input,
     understanding,
     llmClient,
+    projectRoot,
     model,
     maxTokens,
     temperature,
     maxRetries = 2,
   } = options;
 
-  const userPrompt = buildDecomposePrompt(input, understanding);
+  const basePrompt = buildDecomposePrompt(input, understanding);
+  const memory = new LayeredMemoryManager({
+    maxTokens: maxTokens ?? 8192,
+    projectRoot: projectRoot ?? process.cwd(),
+  });
+  memory.setPhaseContext('decompose', input.name);
+  memory.setTaskPlan(basePrompt);
+  const userPrompt = messagesToPrompt(
+    memory.buildMessages(
+      'Decompose the feature into executable tasks and return JSON only.',
+    ),
+  );
 
   let lastError: Error | undefined;
 
