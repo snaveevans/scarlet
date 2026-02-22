@@ -3,7 +3,11 @@ import { resolve } from 'node:path';
 import { existsSync, copyFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { parsePRDFile } from './prd/parser.js';
+import { loadPRD } from './prd/loader.js';
+import { PRDMeta } from './prd/schemas.js';
+import type { PRD as LegacyPRD } from './prd/schemas.js';
+import type { PRDv2 } from './prd/schemas-v2.js';
+import type { LoadedPRD } from './prd/loader.js';
 import { StateManager } from './state/state-manager.js';
 import { ProgressLog } from './state/progress-log.js';
 import { loadConfig } from './config.js';
@@ -17,8 +21,10 @@ import {
   planToTasks,
   savePlan,
   prdToComprehensionInput,
+  prdV2ToComprehensionInput,
 } from './comprehension/index.js';
 import type { AgentLoopConfig } from './types.js';
+import type { ComprehensionInput } from './comprehension/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -55,9 +61,9 @@ program
       process.exit(1);
     }
 
-    let prd;
+    let loaded;
     try {
-      prd = parsePRDFile(resolvedPrd);
+      loaded = loadPRD(resolvedPrd);
     } catch (err) {
       console.error(
         `Error: Failed to parse PRD: ${err instanceof Error ? err.message : String(err)}`,
@@ -65,22 +71,26 @@ program
       process.exit(1);
     }
 
+    let prd = toLegacyPRD(loaded);
+    const comprehensionInput = toComprehensionInput(loaded);
+    const shouldComprehend =
+      loaded.format === 'v2' || Boolean(opts['comprehend']);
+
     const projectRoot = resolve(prd.meta.projectRoot);
     const cliOverrides = buildCliOverrides(opts);
     const config = loadConfig(projectRoot, cliOverrides);
 
     // Comprehension phase: generate tasks from AC instead of using PRD's predefined tasks
-    if (opts['comprehend'] as boolean) {
+    if (shouldComprehend) {
       console.log('\n=== Running Comprehension Phase ===\n');
       const llmClient = createLLMClient(config.llm.provider, {
         apiKey: undefined,
         baseUrl: undefined,
       });
       const tools = createCoreToolRegistry();
-      const input = prdToComprehensionInput(prd);
 
       const result = await runComprehension({
-        input,
+        input: comprehensionInput,
         llmClient,
         tools,
         projectRoot,
@@ -89,7 +99,7 @@ program
       // Persist the plan
       const planPath = savePlan(
         projectRoot,
-        prd.projectName,
+        loaded.name,
         result.understanding,
         result.plan,
       );
@@ -144,9 +154,9 @@ program
       process.exit(1);
     }
 
-    let prd;
+    let loaded;
     try {
-      prd = parsePRDFile(resolvedPrd);
+      loaded = loadPRD(resolvedPrd);
     } catch (err) {
       console.error(
         `Error: Failed to parse PRD: ${err instanceof Error ? err.message : String(err)}`,
@@ -154,6 +164,8 @@ program
       process.exit(1);
     }
 
+    const prd = toLegacyPRD(loaded);
+    const input = toComprehensionInput(loaded);
     const projectRoot = resolve(prd.meta.projectRoot);
     const config = loadConfig(projectRoot, { verbose: opts['verbose'] as boolean ?? false });
 
@@ -162,9 +174,8 @@ program
       baseUrl: undefined,
     });
     const tools = createCoreToolRegistry();
-    const input = prdToComprehensionInput(prd);
 
-    console.log(`\n=== Comprehension: ${prd.projectName} ===\n`);
+    console.log(`\n=== Comprehension: ${loaded.name} ===\n`);
     console.log(`Acceptance Criteria: ${input.acceptanceCriteria.length}`);
     console.log('');
 
@@ -179,7 +190,7 @@ program
       // Persist the plan
       const planPath = savePlan(
         projectRoot,
-        prd.projectName,
+        loaded.name,
         result.understanding,
         result.plan,
       );
@@ -233,9 +244,9 @@ program
     const state = stateManager.getState();
     const progressLog = new ProgressLog(projectRoot);
 
-    let prd;
+    let loaded;
     try {
-      prd = parsePRDFile(state.prdFile);
+      loaded = loadPRD(state.prdFile);
     } catch (err) {
       console.error(
         `Error: Failed to parse PRD: ${err instanceof Error ? err.message : String(err)}`,
@@ -243,6 +254,7 @@ program
       process.exit(1);
     }
 
+    const prd = toLegacyPRD(loaded);
     const config = loadConfig(projectRoot, { verbose: opts.verbose ?? false });
     const agent = resolveAgent(config.agent, config);
 
@@ -318,14 +330,23 @@ program
 program
   .command('init')
   .description('Generate a PRD template file')
+  .option('--format <format>', 'PRD template format (v1|v2)', 'v1')
   .option('--output <path>', 'Output file path', './prd.md')
-  .action((opts: { output: string }) => {
-    const templateSrc = join(__dirname, '..', 'templates', 'prd-template.md');
+  .action((opts: { output: string; format: string }) => {
+    const format = opts.format?.toLowerCase() ?? 'v1';
+    if (format !== 'v1' && format !== 'v2') {
+      console.error(`Invalid format "${opts.format}". Use "v1" or "v2".`);
+      process.exit(1);
+    }
+
+    const templateFile =
+      format === 'v2' ? 'prd-v2-template.md' : 'prd-template.md';
+    const templateSrc = join(__dirname, '..', 'templates', templateFile);
     const dest = resolve(opts.output);
 
     if (!existsSync(templateSrc)) {
       // Write inline template if file not found (e.g., after build)
-      writeInlineTemplate(dest);
+      writeInlineTemplate(dest, format);
     } else {
       copyFileSync(templateSrc, dest);
     }
@@ -333,6 +354,65 @@ program
   });
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
+
+function toLegacyPRD(loaded: LoadedPRD): LegacyPRD {
+  if (loaded.format === 'v1') {
+    if (!loaded.v1) {
+      throw new Error('Loaded v1 PRD is missing parsed data');
+    }
+    return loaded.v1;
+  }
+
+  if (!loaded.v2) {
+    throw new Error('Loaded v2 PRD is missing parsed data');
+  }
+
+  return {
+    projectName: loaded.v2.name,
+    meta: PRDMeta.parse({ techStack: 'Unknown' }),
+    context: buildContextFromV2(loaded.v2),
+    tasks: [],
+  };
+}
+
+function toComprehensionInput(loaded: LoadedPRD): ComprehensionInput {
+  if (loaded.format === 'v1') {
+    if (!loaded.v1) {
+      throw new Error('Loaded v1 PRD is missing parsed data');
+    }
+    return prdToComprehensionInput(loaded.v1);
+  }
+
+  if (!loaded.v2) {
+    throw new Error('Loaded v2 PRD is missing parsed data');
+  }
+
+  return prdV2ToComprehensionInput(loaded.v2);
+}
+
+function buildContextFromV2(prd: PRDv2): string {
+  const sections = [prd.summary];
+
+  if (prd.constraints.length > 0) {
+    sections.push(
+      `Constraints:\n${prd.constraints.map((c) => `- ${c.description}`).join('\n')}`,
+    );
+  }
+
+  if (prd.adrs.length > 0) {
+    sections.push(
+      `ADRs:\n${prd.adrs
+        .map((adr) => `- ${adr.id}: ${adr.title}\n  Decision: ${adr.decision}\n  Rationale: ${adr.rationale}`)
+        .join('\n')}`,
+    );
+  }
+
+  if (prd.notes) {
+    sections.push(`Notes:\n${prd.notes}`);
+  }
+
+  return sections.join('\n\n');
+}
 
 function buildCliOverrides(
   opts: Record<string, unknown>,
@@ -406,12 +486,12 @@ function truncate(str: string, maxLen: number): string {
   return str.slice(0, maxLen - 1) + '…';
 }
 
-function writeInlineTemplate(dest: string): void {
-  const template = getPRDTemplate();
+function writeInlineTemplate(dest: string, format: 'v1' | 'v2'): void {
+  const template = format === 'v2' ? getPRDv2Template() : getPRDv1Template();
   writeFileSync(dest, template, 'utf-8');
 }
 
-function getPRDTemplate(): string {
+function getPRDv1Template(): string {
   return `# Project: <project-name>
 
 ## Meta
@@ -451,6 +531,29 @@ Describe your project's architecture, key patterns, and conventions here.
   - Criterion 1
 - **Tests:**
   - \`src/api/__tests__/example.test.ts\` — tests pass
+`;
+}
+
+function getPRDv2Template(): string {
+  return `# PRD: <feature-name>
+
+## Summary
+Describe the feature outcome and user value in 1-2 paragraphs.
+
+## Acceptance Criteria
+- [ ] AC-1: Describe a concrete, testable behavior
+- [ ] AC-2: Describe another testable behavior
+
+## Constraints
+- Optional constraint (performance, compatibility, policy, etc.)
+
+## ADRs
+### ADR-001: Optional decision title
+Decision: Describe the architectural decision.
+Rationale: Explain why this decision was made.
+
+## Notes
+Optional implementation hints, links, or context.
 `;
 }
 

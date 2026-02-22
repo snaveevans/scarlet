@@ -9,5 +9,5 @@ export { runComprehension } from './comprehension.js';
 export type { ComprehensionOptions, ComprehensionResult } from './comprehension.js';
 export { planToTasks } from './plan-to-tasks.js';
 export { savePlan } from './persist-plan.js';
-export { prdToComprehensionInput } from './prd-bridge.js';
+export { prdToComprehensionInput, prdV2ToComprehensionInput } from './prd-bridge.js';
 export type { ComprehensionInput, ImplementationPlan, CodebaseUnderstanding } from './types.js';

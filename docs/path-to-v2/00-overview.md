@@ -22,7 +22,7 @@ The hard infrastructure problems (atomic state, crash recovery, topo sort, fail-
 | 2 | [02-tool-runtime.md](./02-tool-runtime.md) | Tool runtime the LLM can call | Phase 1 | **DONE** |
 | 3 | [03-coding-agent.md](./03-coding-agent.md) | Agent loop that replaces OpenCode shelling | Phases 1+2 | **DONE** |
 | 4 | [04-phase0-comprehension.md](./04-phase0-comprehension.md) | Codebase exploration + task decomposition | Phase 3 | **DONE** |
-| 5 | [05-prd-v2-format.md](./05-prd-v2-format.md) | New AC-only PRD format + parser | Phase 4 |
+| 5 | [05-prd-v2-format.md](./05-prd-v2-format.md) | New AC-only PRD format + parser | Phase 4 | **DONE** |
 | 6 | [06-phase1-scaffolding.md](./06-phase1-scaffolding.md) | Scaffold-before-implement pattern | Phase 5 |
 | 7 | [07-phase4-self-review.md](./07-phase4-self-review.md) | Agent reviews its own diff against PRD | Phase 3 |
 | 8 | [08-knowledge-store.md](./08-knowledge-store.md) | Skills, pitfalls, tools persistence | Nothing (can parallel with 1-3) |

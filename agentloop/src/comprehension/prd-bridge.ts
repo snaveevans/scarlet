@@ -6,6 +6,7 @@
  */
 
 import type { PRD } from '../prd/schemas.js';
+import type { PRDv2 } from '../prd/schemas-v2.js';
 import type { ComprehensionInput } from './types.js';
 
 /**
@@ -45,5 +46,24 @@ export function prdToComprehensionInput(prd: PRD): ComprehensionInput {
     constraints: [],
     adrs: [],
     notes: prd.context,
+  };
+}
+
+/**
+ * Convert a parsed v2 PRD into ComprehensionInput.
+ */
+export function prdV2ToComprehensionInput(prd: PRDv2): ComprehensionInput {
+  return {
+    name: prd.name,
+    summary: prd.summary,
+    acceptanceCriteria: prd.acceptanceCriteria,
+    constraints: prd.constraints.map((c) => c.description),
+    adrs: prd.adrs.map((adr) => ({
+      id: adr.id,
+      title: adr.title,
+      decision: adr.decision,
+      rationale: adr.rationale,
+    })),
+    notes: prd.notes ?? '',
   };
 }

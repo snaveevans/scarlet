@@ -165,10 +165,10 @@ Add `--format` flag to `init` command:
 
 ## Definition of Done
 
-- [ ] v2 PRD parser handles the brainstorm-v2 format
-- [ ] Format auto-detection works for both v1 and v2
-- [ ] `agentloop init --format v2` produces a valid v2 template
-- [ ] v2 PRDs flow through comprehension → executor correctly
-- [ ] v1 PRDs still work exactly as before
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
+- [x] v2 PRD parser handles the brainstorm-v2 format
+- [x] Format auto-detection works for both v1 and v2
+- [x] `agentloop init --format v2` produces a valid v2 template
+- [x] v2 PRDs flow through comprehension → executor correctly
+- [x] v1 PRDs still work exactly as before
+- [x] All tests pass (252 total)
+- [x] `pnpm build` succeeds

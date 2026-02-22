@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { prdToComprehensionInput } from '../../src/comprehension/prd-bridge.js';
+import {
+  prdToComprehensionInput,
+  prdV2ToComprehensionInput,
+} from '../../src/comprehension/prd-bridge.js';
 import type { PRD } from '../../src/prd/schemas.js';
+import type { PRDv2 } from '../../src/prd/schemas-v2.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,6 +54,28 @@ function makePRD(overrides: Partial<PRD> = {}): PRD {
         maxAttempts: 3,
       },
     ],
+    ...overrides,
+  };
+}
+
+function makePRDv2(overrides: Partial<PRDv2> = {}): PRDv2 {
+  return {
+    name: 'PRD V2 Feature',
+    summary: 'Implement V2 behavior.',
+    acceptanceCriteria: [
+      { id: 'AC-1', description: 'First behavior' },
+      { id: 'AC-2', description: 'Second behavior' },
+    ],
+    constraints: [{ description: 'Do not change API contract' }],
+    adrs: [
+      {
+        id: 'ADR-001',
+        title: 'Use existing endpoint',
+        decision: 'Keep using /api/login.',
+        rationale: 'Avoid backend scope expansion.',
+      },
+    ],
+    notes: 'Prefer existing auth UI patterns.',
     ...overrides,
   };
 }
@@ -134,5 +160,17 @@ describe('prdToComprehensionInput', () => {
     });
     const input = prdToComprehensionInput(prd);
     expect(input.acceptanceCriteria).toEqual([]);
+  });
+});
+
+describe('prdV2ToComprehensionInput', () => {
+  it('maps v2 fields directly into comprehension input', () => {
+    const input = prdV2ToComprehensionInput(makePRDv2());
+    expect(input.name).toBe('PRD V2 Feature');
+    expect(input.summary).toBe('Implement V2 behavior.');
+    expect(input.acceptanceCriteria).toHaveLength(2);
+    expect(input.constraints).toEqual(['Do not change API contract']);
+    expect(input.adrs).toHaveLength(1);
+    expect(input.notes).toBe('Prefer existing auth UI patterns.');
   });
 });
