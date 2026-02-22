@@ -3,6 +3,7 @@ import { resolveExecutionOrder, hasFailedDependency } from '../planner/dependenc
 import { runValidationPipeline } from '../validator/validator.js';
 import { buildPrompt } from '../utils/context-builder.js';
 import { stageAndCommit, createAndCheckoutBranch, sanitizeBranchName } from '../utils/git.js';
+import { runScaffold } from '../scaffold/index.js';
 import { StateManager } from '../state/state-manager.js';
 import { ProgressLog } from '../state/progress-log.js';
 import type { AgentAdapter } from './agent-adapter.js';
@@ -38,9 +39,10 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
   const { prd, prdFile, config, agent, stateManager, progressLog } = options;
 
   const projectRoot = resolve(prd.meta.projectRoot);
+  const isNewRun = !stateManager.hasExistingRun();
 
   // Initialize or resume state
-  if (!stateManager.hasExistingRun()) {
+  if (isNewRun) {
     stateManager.initializeRun(prdFile, prd.tasks);
     progressLog.started();
   } else {
@@ -72,6 +74,40 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
   if (config.dryRun) {
     printExecutionPlan(orderedTasks);
     return;
+  }
+
+  if (isNewRun) {
+    const scaffoldResult = await runScaffold({
+      tasks: orderedTasks,
+      projectRoot,
+      meta: prd.meta,
+    });
+
+    progressLog.info(
+      `[SCAFFOLD] Created ${scaffoldResult.filesCreated.length} files, ${scaffoldResult.testsCreated.length} test files`,
+    );
+
+    if (!scaffoldResult.success) {
+      const message = scaffoldResult.errors.join('\n\n');
+      progressLog.error(`[SCAFFOLD] Failed:\n${message}`);
+      throw new Error(`Scaffolding failed:\n${message}`);
+    }
+
+    if (config.autoCommit) {
+      try {
+        const commitMsg = 'chore(scaffold): create project scaffold';
+        const sha = await stageAndCommit(commitMsg, { cwd: projectRoot });
+        if (sha) {
+          progressLog.info(
+            `[SCAFFOLD] COMMITTED: ${sha.slice(0, 7)} "${commitMsg}"`,
+          );
+        }
+      } catch (err) {
+        progressLog.error(
+          `Scaffold commit failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
 
   // Main execution loop

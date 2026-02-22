@@ -20,7 +20,17 @@ vi.mock('../../src/utils/git.js', () => ({
   sanitizeBranchName: vi.fn((name: string) => name.toLowerCase().replace(/\s+/g, '-')),
 }));
 
+vi.mock('../../src/scaffold/index.js', () => ({
+  runScaffold: vi.fn().mockResolvedValue({
+    filesCreated: [],
+    testsCreated: [],
+    success: true,
+    errors: [],
+  }),
+}));
+
 import { runValidationPipeline } from '../../src/validator/validator.js';
+import { runScaffold } from '../../src/scaffold/index.js';
 
 const mockPRD: PRD = {
   projectName: 'Test Project',
@@ -96,6 +106,12 @@ describe('runLoop', () => {
     stateManager = new StateManager(tmpDir);
     progressLog = new ProgressLog(tmpDir);
     vi.resetAllMocks();
+    vi.mocked(runScaffold).mockResolvedValue({
+      filesCreated: [],
+      testsCreated: [],
+      success: true,
+      errors: [],
+    });
   });
 
   afterEach(() => {
@@ -118,6 +134,7 @@ describe('runLoop', () => {
     expect(state.tasks[0]!.status).toBe('passed');
     expect(state.tasks[1]!.status).toBe('passed');
     expect(state.summary.passed).toBe(2);
+    expect(runScaffold).toHaveBeenCalledTimes(1);
   });
 
   it('marks task as failed after max attempts', async () => {
@@ -186,6 +203,7 @@ describe('runLoop', () => {
     expect(state.tasks[1]!.status).toBe('passed');
     // Agent should only be called once (for T-002)
     expect(agent.execute).toHaveBeenCalledTimes(1);
+    expect(runScaffold).not.toHaveBeenCalled();
   });
 
   it('prints dry run plan without executing', async () => {

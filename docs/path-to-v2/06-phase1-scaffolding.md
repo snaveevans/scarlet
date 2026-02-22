@@ -81,10 +81,10 @@ The scaffold commit is the second commit on the branch (after the plan commit fr
 
 ## Definition of Done
 
-- [ ] Scaffold creates file stubs matching the plan
-- [ ] Scaffold creates test stubs with todo tests
-- [ ] Typecheck passes after scaffold (stubs compile)
-- [ ] Scaffold committed as its own commit
-- [ ] Implementation tasks can reference scaffolded files
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
+- [x] Scaffold creates file stubs matching the plan
+- [x] Scaffold creates test stubs with todo tests
+- [x] Typecheck passes after scaffold (stubs compile)
+- [x] Scaffold committed as its own commit
+- [x] Implementation tasks can reference scaffolded files
+- [x] All tests pass (255 total)
+- [x] `pnpm build` succeeds
