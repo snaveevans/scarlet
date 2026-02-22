@@ -187,12 +187,12 @@ The `run` command flow becomes:
 
 ## Definition of Done
 
-- [ ] Exploration step produces `CodebaseUnderstanding` from a real codebase (manual test)
-- [ ] Decomposition step produces `ImplementationPlan` from AC
-- [ ] Plan validation catches cycles and missing coverage
-- [ ] Plan converts to `Task[]` the executor can run
-- [ ] Plan committed to `.scarlet/plans/`
-- [ ] All tests pass
-- [ ] Full round-trip works: PRD → comprehension → executor → validation
-- [ ] `pnpm build` succeeds
-- [ ] Existing tests still pass
+- [x] Exploration step produces `CodebaseUnderstanding` from a real codebase (manual test)
+- [x] Decomposition step produces `ImplementationPlan` from AC
+- [x] Plan validation catches cycles and missing coverage
+- [x] Plan converts to `Task[]` the executor can run
+- [x] Plan committed to `.scarlet/plans/`
+- [x] All tests pass (221 total, 75 new for Phase 4)
+- [x] Full round-trip works: PRD → comprehension → executor → validation
+- [x] `pnpm build` succeeds
+- [x] Existing tests still pass

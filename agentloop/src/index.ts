@@ -1,10 +1,9 @@
 import { Command } from 'commander';
-import { resolve, basename, extname } from 'node:path';
+import { resolve } from 'node:path';
 import { existsSync, copyFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { parsePRDFile } from './prd/parser.js';
-import { resolveExecutionOrder } from './planner/dependency-graph.js';
 import { StateManager } from './state/state-manager.js';
 import { ProgressLog } from './state/progress-log.js';
 import { loadConfig } from './config.js';
@@ -13,6 +12,12 @@ import { OpenCodeAdapter } from './executor/opencode-adapter.js';
 import { ScarletAdapter } from './executor/scarlet-adapter.js';
 import { createLLMClient } from './llm/providers.js';
 import { createCoreToolRegistry } from './tools/index.js';
+import {
+  runComprehension,
+  planToTasks,
+  savePlan,
+  prdToComprehensionInput,
+} from './comprehension/index.js';
 import type { AgentLoopConfig } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,6 +45,7 @@ program
   )
   .option('--agent <name>', 'Coding agent adapter to use', 'opencode')
   .option('--dry-run', 'Parse PRD and show execution plan without running')
+  .option('--comprehend', 'Run comprehension phase to generate tasks from AC')
   .option('--context-budget <n>', 'Approx token budget per task', parseInt)
   .option('--verbose', 'Stream agent output to stdout')
   .action(async (prdFile: string, opts: Record<string, unknown>) => {
@@ -63,6 +69,45 @@ program
     const cliOverrides = buildCliOverrides(opts);
     const config = loadConfig(projectRoot, cliOverrides);
 
+    // Comprehension phase: generate tasks from AC instead of using PRD's predefined tasks
+    if (opts['comprehend'] as boolean) {
+      console.log('\n=== Running Comprehension Phase ===\n');
+      const llmClient = createLLMClient(config.llm.provider, {
+        apiKey: undefined,
+        baseUrl: undefined,
+      });
+      const tools = createCoreToolRegistry();
+      const input = prdToComprehensionInput(prd);
+
+      const result = await runComprehension({
+        input,
+        llmClient,
+        tools,
+        projectRoot,
+      });
+
+      // Persist the plan
+      const planPath = savePlan(
+        projectRoot,
+        prd.projectName,
+        result.understanding,
+        result.plan,
+      );
+      console.log(`Plan saved to: ${planPath}`);
+
+      if (result.decisions.length > 0) {
+        console.log('\nDecisions made:');
+        for (const d of result.decisions) {
+          console.log(`  - ${d.decision}: ${d.rationale}`);
+        }
+      }
+
+      // Replace PRD tasks with comprehension-generated tasks
+      const generatedTasks = planToTasks(result.plan, prd.meta);
+      console.log(`\nGenerated ${generatedTasks.length} tasks from comprehension.\n`);
+      prd = { ...prd, tasks: generatedTasks };
+    }
+
     const stateManager = new StateManager(projectRoot);
     const progressLog = new ProgressLog(projectRoot);
     const agent = resolveAgent(config.agent, config);
@@ -83,6 +128,87 @@ program
         `\nFatal error: ${err instanceof Error ? err.message : String(err)}`,
       );
       console.error('State saved. Run `agentloop resume` to continue.');
+      process.exit(1);
+    }
+  });
+
+// ── comprehend ────────────────────────────────────────────────────────────────
+program
+  .command('comprehend <prd-file>')
+  .description('Run only the comprehension phase (explore + decompose + validate)')
+  .option('--verbose', 'Show detailed output')
+  .action(async (prdFile: string, opts: Record<string, unknown>) => {
+    const resolvedPrd = resolve(prdFile);
+    if (!existsSync(resolvedPrd)) {
+      console.error(`Error: PRD file not found: ${resolvedPrd}`);
+      process.exit(1);
+    }
+
+    let prd;
+    try {
+      prd = parsePRDFile(resolvedPrd);
+    } catch (err) {
+      console.error(
+        `Error: Failed to parse PRD: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
+
+    const projectRoot = resolve(prd.meta.projectRoot);
+    const config = loadConfig(projectRoot, { verbose: opts['verbose'] as boolean ?? false });
+
+    const llmClient = createLLMClient(config.llm.provider, {
+      apiKey: undefined,
+      baseUrl: undefined,
+    });
+    const tools = createCoreToolRegistry();
+    const input = prdToComprehensionInput(prd);
+
+    console.log(`\n=== Comprehension: ${prd.projectName} ===\n`);
+    console.log(`Acceptance Criteria: ${input.acceptanceCriteria.length}`);
+    console.log('');
+
+    try {
+      const result = await runComprehension({
+        input,
+        llmClient,
+        tools,
+        projectRoot,
+      });
+
+      // Persist the plan
+      const planPath = savePlan(
+        projectRoot,
+        prd.projectName,
+        result.understanding,
+        result.plan,
+      );
+
+      console.log(`\n=== Comprehension Complete ===\n`);
+      console.log(`Tasks generated: ${result.plan.tasks.length}`);
+      console.log(`Decisions made: ${result.decisions.length}`);
+      console.log(`Plan saved to: ${planPath}`);
+
+      if (result.decisions.length > 0) {
+        console.log('\nDecisions:');
+        for (const d of result.decisions) {
+          console.log(`  - ${d.decision}`);
+          console.log(`    Rationale: ${d.rationale}`);
+        }
+      }
+
+      console.log('\nTasks:');
+      for (const task of result.plan.tasks) {
+        const deps = task.dependsOn.length > 0
+          ? ` [depends: ${task.dependsOn.join(', ')}]`
+          : '';
+        console.log(`  ${task.id}: ${task.title} (${task.complexity})${deps}`);
+      }
+      console.log('');
+    } catch (err) {
+      console.error(
+        `\nComprehension failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       process.exit(1);
     }
   });
