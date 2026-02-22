@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { resolveExecutionOrder, hasFailedDependency } from '../planner/dependency-graph.js';
 import { runValidationPipeline } from '../validator/validator.js';
 import { buildPrompt } from '../utils/context-builder.js';
@@ -19,7 +20,7 @@ export interface ExecutorOptions {
 export async function runLoop(options: ExecutorOptions): Promise<void> {
   const { prd, prdFile, config, agent, stateManager, progressLog } = options;
 
-  const projectRoot = prd.meta.projectRoot;
+  const projectRoot = resolve(prd.meta.projectRoot);
 
   // Initialize or resume state
   if (!stateManager.hasExistingRun()) {

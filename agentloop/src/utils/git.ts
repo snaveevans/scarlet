@@ -1,4 +1,4 @@
-import { runShellCommand } from './shell.js';
+import { runShell, runShellCommand } from './shell.js';
 
 export interface GitOptions {
   cwd: string;
@@ -6,23 +6,17 @@ export interface GitOptions {
 
 /**
  * Create and checkout a branch. If the branch already exists, just check it out.
+ * Uses spawn args directly to avoid shell injection via branch names.
  */
 export async function createAndCheckoutBranch(
   branchName: string,
   options: GitOptions,
 ): Promise<void> {
-  // Try to create the branch
-  const create = await runShellCommand(
-    `git checkout -b "${branchName}"`,
-    options,
-  );
+  const create = await runShell('git', ['checkout', '-b', branchName], options);
 
   if (create.exitCode !== 0) {
     // Branch may already exist — just check it out
-    const checkout = await runShellCommand(
-      `git checkout "${branchName}"`,
-      options,
-    );
+    const checkout = await runShell('git', ['checkout', branchName], options);
     if (checkout.exitCode !== 0) {
       throw new Error(
         `Failed to checkout branch ${branchName}: ${checkout.stderr}`,
@@ -34,20 +28,18 @@ export async function createAndCheckoutBranch(
 /**
  * Stage all changes and commit with the given message.
  * Returns the short SHA of the new commit.
+ * Uses spawn args directly to avoid shell injection via commit messages.
  */
 export async function stageAndCommit(
   message: string,
   options: GitOptions,
 ): Promise<string> {
-  const add = await runShellCommand('git add -A', options);
+  const add = await runShell('git', ['add', '-A'], options);
   if (add.exitCode !== 0) {
     throw new Error(`git add failed: ${add.stderr}`);
   }
 
-  const commit = await runShellCommand(
-    `git commit -m "${message.replace(/"/g, '\\"')}"`,
-    options,
-  );
+  const commit = await runShell('git', ['commit', '-m', message], options);
 
   if (commit.exitCode !== 0) {
     // Nothing to commit is not an error
@@ -66,7 +58,7 @@ export async function stageAndCommit(
  * Get the current HEAD short SHA.
  */
 export async function getCurrentSha(options: GitOptions): Promise<string> {
-  const result = await runShellCommand('git rev-parse --short HEAD', options);
+  const result = await runShell('git', ['rev-parse', '--short', 'HEAD'], options);
   if (result.exitCode !== 0) {
     throw new Error(`git rev-parse failed: ${result.stderr}`);
   }
@@ -77,7 +69,7 @@ export async function getCurrentSha(options: GitOptions): Promise<string> {
  * Check if the working tree has uncommitted changes.
  */
 export async function hasChanges(options: GitOptions): Promise<boolean> {
-  const result = await runShellCommand('git status --porcelain', options);
+  const result = await runShell('git', ['status', '--porcelain'], options);
   return result.exitCode === 0 && result.stdout.trim().length > 0;
 }
 
