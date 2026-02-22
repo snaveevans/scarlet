@@ -10,6 +10,9 @@ import { ProgressLog } from './state/progress-log.js';
 import { loadConfig } from './config.js';
 import { runLoop } from './executor/executor.js';
 import { OpenCodeAdapter } from './executor/opencode-adapter.js';
+import { ScarletAdapter } from './executor/scarlet-adapter.js';
+import { createLLMClient } from './llm/providers.js';
+import { createCoreToolRegistry } from './tools/index.js';
 import type { AgentLoopConfig } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -62,7 +65,7 @@ program
 
     const stateManager = new StateManager(projectRoot);
     const progressLog = new ProgressLog(projectRoot);
-    const agent = resolveAgent(config.agent);
+    const agent = resolveAgent(config.agent, config);
 
     try {
       await runLoop({
@@ -115,7 +118,7 @@ program
     }
 
     const config = loadConfig(projectRoot, { verbose: opts.verbose ?? false });
-    const agent = resolveAgent(config.agent);
+    const agent = resolveAgent(config.agent, config);
 
     try {
       await runLoop({
@@ -233,13 +236,26 @@ function buildCliOverrides(
   return overrides;
 }
 
-function resolveAgent(agentName: string) {
+function resolveAgent(agentName: string, config: AgentLoopConfig) {
   switch (agentName) {
+    case 'scarlet': {
+      const llmClient = createLLMClient(config.llm.provider, {
+        apiKey: undefined,       // read from env
+        baseUrl: undefined,
+      });
+      const tools = createCoreToolRegistry();
+      return new ScarletAdapter({
+        llmClient,
+        tools,
+        model: config.llm.model,
+        maxTokens: config.llm.maxTokens,
+      });
+    }
     case 'opencode':
       return new OpenCodeAdapter();
     default:
-      console.error(`Unknown agent: ${agentName}. Defaulting to opencode.`);
-      return new OpenCodeAdapter();
+      console.error(`Unknown agent: ${agentName}. Available: scarlet, opencode`);
+      process.exit(1);
   }
 }
 

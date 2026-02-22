@@ -53,11 +53,11 @@ export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens';
 
 export interface LLMRequest {
   messages: Message[];
-  system?: string;
-  tools?: ToolDefinition[];
-  model?: string;
-  maxTokens?: number;
-  temperature?: number;
+  system?: string | undefined;
+  tools?: ToolDefinition[] | undefined;
+  model?: string | undefined;
+  maxTokens?: number | undefined;
+  temperature?: number | undefined;
 }
 
 export interface TokenUsage {

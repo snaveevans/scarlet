@@ -153,11 +153,22 @@ After this phase is verified working:
 
 ## Definition of Done
 
-- [ ] Agent loop runs LLM → tool → LLM cycles correctly
-- [ ] `maxTurns` safety limit works
-- [ ] Token usage tracked across turns
-- [ ] `ScarletAdapter` plugs into existing executor without executor changes
-- [ ] CLI defaults to `--agent scarlet`
-- [ ] Integration test passes (mock LLM → real filesystem)
-- [ ] All existing tests still pass
-- [ ] `pnpm build` succeeds
+- [x] Agent loop runs LLM → tool → LLM cycles correctly
+- [x] `maxTurns` safety limit works
+- [x] Token usage tracked across turns
+- [x] `ScarletAdapter` plugs into existing executor without executor changes
+- [ ] CLI defaults to `--agent scarlet` (kept opencode as default for now — switch later)
+- [x] Integration test passes (mock LLM → real filesystem)
+- [x] All existing tests still pass (146 total, 0 regressions)
+- [x] `pnpm build` succeeds
+
+## Files Created/Modified
+
+- `src/agent/agent.ts` — Core agent loop (runAgent)
+- `src/agent/prompts.ts` — System prompt builder
+- `src/executor/scarlet-adapter.ts` — ScarletAdapter (AgentAdapter impl)
+- `src/index.ts` — Wired scarlet adapter into CLI
+- `src/llm/client.ts` — Fixed optional props for exactOptionalPropertyTypes
+- `tests/agent/agent.test.ts` — 11 tests (tool calls, maxTurns, tokens, callbacks)
+- `tests/agent/scarlet-adapter.test.ts` — 4 tests
+- `tests/agent/integration.test.ts` — 2 tests (write file, read+edit file via tools)
