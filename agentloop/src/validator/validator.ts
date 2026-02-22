@@ -7,11 +7,26 @@ import type {
 import type { PRDMeta, Task } from '../prd/schemas.js';
 
 export interface ValidatorOptions {
+  /** Which validation steps to run, in the order they will execute. */
   steps: Array<'typecheck' | 'lint' | 'test' | 'build'>;
+  /** Timeout per step in milliseconds (tests get 2× this value). */
   timeoutMs: number;
+  /** Absolute path to the project root (used as `cwd` for commands). */
   projectRoot: string;
 }
 
+/**
+ * Run the validation pipeline for a single task attempt.
+ *
+ * Steps execute sequentially in the order specified by `options.steps`.
+ * If any **required** step (currently all steps are required) fails, the
+ * remaining steps are skipped and marked as failed with the message
+ * "Skipped due to earlier failure".
+ *
+ * The `test` step is only included when the task declares test files.
+ *
+ * @returns A {@link PipelineResult} with per-step results and aggregated errors.
+ */
 export async function runValidationPipeline(
   prdMeta: PRDMeta,
   task: Task,
@@ -54,6 +69,10 @@ export async function runValidationPipeline(
   };
 }
 
+/**
+ * Build the ordered list of {@link ValidationStep}s from PRD metadata.
+ * The `test` step is omitted when the task has no test files.
+ */
 function buildPipeline(
   meta: PRDMeta,
   task: Task,
@@ -105,6 +124,7 @@ function buildPipeline(
   return pipeline;
 }
 
+/** Execute a single validation step and return a structured result. */
 async function runStep(
   step: ValidationStep,
   cwd: string,

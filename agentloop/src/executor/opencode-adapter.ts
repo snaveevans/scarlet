@@ -6,6 +6,17 @@ import { randomUUID } from 'node:crypto';
 import type { AgentAdapter, AgentExecuteOptions } from './agent-adapter.js';
 import type { AgentResult } from '../types.js';
 
+/**
+ * Agent adapter for the [OpenCode](https://github.com/opencode-ai/opencode) CLI.
+ *
+ * Sends the prompt to `opencode --non-interactive` via stdin. If the pipe
+ * approach fails (e.g. the CLI version doesn't support stdin), it falls
+ * back to writing the prompt to a temp file and passing `--file <path>`.
+ *
+ * To implement a new adapter for a different coding agent, create a class
+ * that implements {@link AgentAdapter} and register it in `resolveAgent()`
+ * in `src/index.ts`.
+ */
 export class OpenCodeAdapter implements AgentAdapter {
   readonly name = 'opencode';
 
@@ -43,6 +54,7 @@ export class OpenCodeAdapter implements AgentAdapter {
     }
   }
 
+  /** Primary strategy: pipe the prompt to `opencode --non-interactive` via stdin. */
   private runWithPipe(
     prompt: string,
     cwd: string,
@@ -102,6 +114,7 @@ export class OpenCodeAdapter implements AgentAdapter {
     });
   }
 
+  /** Fallback strategy: pass the prompt as `opencode --file <path>`. */
   private runWithFile(
     promptFile: string,
     cwd: string,

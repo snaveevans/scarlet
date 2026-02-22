@@ -4,15 +4,29 @@ import { join, dirname } from 'node:path';
 const STATE_DIR = '.agentloop';
 const LOG_FILE = 'progress.log';
 
+/**
+ * Append-only log written to `.agentloop/progress.log`.
+ *
+ * Every entry is a single line with format:
+ * ```
+ * [<ISO-8601 timestamp>] <message>
+ * ```
+ *
+ * The log is human-readable and is the primary tool for post-run
+ * debugging. It records task lifecycle events (started, retry, passed,
+ * failed, skipped), validation results, git commits, and errors.
+ */
 export class ProgressLog {
   private readonly logPath: string;
 
+  /** @param projectRoot - Absolute path to the target project. */
   constructor(projectRoot: string) {
     const dir = join(projectRoot, STATE_DIR);
     mkdirSync(dir, { recursive: true });
     this.logPath = join(dir, LOG_FILE);
   }
 
+  /** Append a timestamped line to the log file. */
   write(message: string): void {
     const timestamp = new Date().toISOString();
     const line = `[${timestamp}] ${message}\n`;
