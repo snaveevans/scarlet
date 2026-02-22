@@ -42,8 +42,27 @@ export type LoopState = z.infer<typeof LoopState>;
  * 2. `.agentloop/config.json` in the project root
  * 3. Built-in defaults (shown below)
  */
+/**
+ * LLM provider and model configuration.
+ *
+ * Used by the native Scarlet agent (Phase 1+). When the agent adapter is
+ * `"scarlet"`, these settings control which model is called.
+ */
+export const LLMConfig = z.object({
+  /** Provider name (e.g. `"anthropic"`). */
+  provider: z.string().default('anthropic'),
+  /** Model identifier passed to the provider. */
+  model: z.string().default('claude-sonnet-4-5-20250929'),
+  /** Maximum tokens the model may generate per turn. */
+  maxTokens: z.number().int().positive().default(8192),
+  /** Sampling temperature (0 = deterministic). */
+  temperature: z.number().min(0).max(2).default(0),
+});
+
+export type LLMConfig = z.infer<typeof LLMConfig>;
+
 export const AgentLoopConfig = z.object({
-  /** Agent adapter name (currently only `"opencode"` is built-in). */
+  /** Agent adapter name (`"scarlet"` for native agent, `"opencode"` for legacy). */
   agent: z.string().default('opencode'),
   /** Max retry attempts per task before marking it `failed`. */
   maxAttempts: z.number().int().positive().default(3),
@@ -67,6 +86,8 @@ export const AgentLoopConfig = z.object({
   dryRun: z.boolean().default(false),
   /** Stream agent stdout/stderr to the terminal in real time. */
   verbose: z.boolean().default(false),
+  /** LLM provider/model configuration for the native Scarlet agent. */
+  llm: LLMConfig.default({}),
 });
 
 export type AgentLoopConfig = z.infer<typeof AgentLoopConfig>;

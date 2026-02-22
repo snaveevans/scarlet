@@ -18,6 +18,12 @@ const DEFAULTS: AgentLoopConfigType = {
   validationTimeout: 60000,
   dryRun: false,
   verbose: false,
+  llm: {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-5-20250929',
+    maxTokens: 8192,
+    temperature: 0,
+  },
 };
 
 /**
