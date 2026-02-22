@@ -18,9 +18,9 @@ The hard infrastructure problems (atomic state, crash recovery, topo sort, fail-
 
 | Phase | Doc | Summary | Depends On |
 |-------|-----|---------|------------|
-| 1 | [01-llm-client.md](./01-llm-client.md) | Native LLM client with Anthropic provider | Nothing |
-| 2 | [02-tool-runtime.md](./02-tool-runtime.md) | Tool runtime the LLM can call | Phase 1 |
-| 3 | [03-coding-agent.md](./03-coding-agent.md) | Agent loop that replaces OpenCode shelling | Phases 1+2 |
+| 1 | [01-llm-client.md](./01-llm-client.md) | Native LLM client with Anthropic provider | Nothing | **DONE** |
+| 2 | [02-tool-runtime.md](./02-tool-runtime.md) | Tool runtime the LLM can call | Phase 1 | **DONE** |
+| 3 | [03-coding-agent.md](./03-coding-agent.md) | Agent loop that replaces OpenCode shelling | Phases 1+2 | **DONE** |
 | 4 | [04-phase0-comprehension.md](./04-phase0-comprehension.md) | Codebase exploration + task decomposition | Phase 3 |
 | 5 | [05-prd-v2-format.md](./05-prd-v2-format.md) | New AC-only PRD format + parser | Phase 4 |
 | 6 | [06-phase1-scaffolding.md](./06-phase1-scaffolding.md) | Scaffold-before-implement pattern | Phase 5 |
