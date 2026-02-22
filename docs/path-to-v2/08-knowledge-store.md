@@ -171,13 +171,13 @@ agentloop/src/knowledge/
 
 ## Definition of Done
 
-- [ ] Skills can be saved, queried, and retrieved
-- [ ] Pitfalls can be saved, queried, and retrieved
-- [ ] Knowledge persisted to `.scarlet/knowledge/` as JSON
-- [ ] Keyword-based query returns relevant results
-- [ ] Confidence lifecycle works (update, record usage)
-- [ ] Pruning archives stale entries
-- [ ] Context.md generated from understanding + skills
-- [ ] Knowledge tools available in tool registry
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
+- [x] Skills can be saved, queried, and retrieved
+- [x] Pitfalls can be saved, queried, and retrieved
+- [x] Knowledge persisted to `.scarlet/knowledge/` as JSON
+- [x] Keyword-based query returns relevant results
+- [x] Confidence lifecycle works (update, record usage)
+- [x] Pruning archives stale entries
+- [x] Context.md generated from understanding + skills
+- [x] Knowledge tools available in tool registry
+- [x] All tests pass (277 total)
+- [x] `pnpm build` succeeds

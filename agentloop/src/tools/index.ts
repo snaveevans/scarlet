@@ -15,6 +15,7 @@ import { listDirectoryTool } from './list-directory.js';
 import { searchFilesTool } from './search-files.js';
 import { findFilesTool } from './find-files.js';
 import { shellTool } from './shell-tool.js';
+import { querySkillsTool, queryPitfallsTool } from './knowledge.js';
 
 /** Create a registry with all core tools pre-registered. */
 export function createCoreToolRegistry(): ToolRegistry {
@@ -26,5 +27,7 @@ export function createCoreToolRegistry(): ToolRegistry {
   registry.register(searchFilesTool);
   registry.register(findFilesTool);
   registry.register(shellTool);
+  registry.register(querySkillsTool);
+  registry.register(queryPitfallsTool);
   return registry;
 }

@@ -25,7 +25,7 @@ The hard infrastructure problems (atomic state, crash recovery, topo sort, fail-
 | 5 | [05-prd-v2-format.md](./05-prd-v2-format.md) | New AC-only PRD format + parser | Phase 4 | **DONE** |
 | 6 | [06-phase1-scaffolding.md](./06-phase1-scaffolding.md) | Scaffold-before-implement pattern | Phase 5 | **DONE** |
 | 7 | [07-phase4-self-review.md](./07-phase4-self-review.md) | Agent reviews its own diff against PRD | Phase 3 | **DONE** |
-| 8 | [08-knowledge-store.md](./08-knowledge-store.md) | Skills, pitfalls, tools persistence | Nothing (can parallel with 1-3) |
+| 8 | [08-knowledge-store.md](./08-knowledge-store.md) | Skills, pitfalls, tools persistence | Nothing (can parallel with 1-3) | **DONE** |
 | 9 | [09-phase5-reflection.md](./09-phase5-reflection.md) | Post-run knowledge extraction | Phases 7+8 |
 | 10 | [10-model-routing.md](./10-model-routing.md) | Per-phase model selection | Phase 3 |
 | 11 | [11-memory-manager.md](./11-memory-manager.md) | Layered context management | Phase 3 |
