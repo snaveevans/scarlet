@@ -49,7 +49,7 @@ export type LoopState = z.infer<typeof LoopState>;
  * `"scarlet"`, these settings control which model is called.
  */
 export const LLMConfig = z.object({
-  /** Provider name (e.g. `"anthropic"`). */
+  /** Provider name (e.g. `"anthropic"` or `"openai"`). */
   provider: z.string().default('anthropic'),
   /** Model identifier passed to the provider. */
   model: z.string().default('claude-sonnet-4-5-20250929'),

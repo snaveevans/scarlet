@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a native LLM client that talks directly to the Anthropic Messages API. This replaces the current approach of shelling out to OpenCode CLI and is the foundation for everything else.
+Build native LLM clients that talk directly to Anthropic and OpenAI-style APIs. This replaces the current approach of shelling out to OpenCode CLI and is the foundation for everything else.
 
 ## Why First
 
@@ -63,7 +63,7 @@ interface LLMClient {
 }
 ```
 
-### 1.2 — Anthropic Provider
+### 1.2 — Anthropic + OpenAI-Compatible Providers
 
 **File:** `agentloop/src/llm/anthropic.ts`
 
@@ -75,6 +75,13 @@ Implement `LLMClient` using the Anthropic Messages API directly via `fetch` (no 
 - Handle API errors with structured error types
 - Map request/response to our interface types
 
+Also implement an OpenAI-compatible provider using the Chat Completions API:
+
+- POST to `https://api.openai.com/v1/chat/completions` (or custom compatible base URL)
+- API key from `OPENAI_API_KEY` env var
+- Map tool definitions to OpenAI `tools[].function.parameters`
+- Map OpenAI `tool_calls` back to internal `tool_use` blocks
+
 ### 1.3 — Provider Registry
 
 **File:** `agentloop/src/llm/providers.ts`
@@ -85,7 +92,7 @@ Simple factory that resolves a provider name to an `LLMClient`:
 function createLLMClient(provider: string, config?: ProviderConfig): LLMClient
 ```
 
-V1 only supports `"anthropic"`. The registry pattern lets us add OpenAI/OpenRouter/Ollama later without changing calling code.
+Registry resolves both `"anthropic"` and `"openai"`. The same pattern still allows adding OpenRouter/Ollama later without changing calling code.
 
 ### 1.4 — Configuration
 
@@ -95,7 +102,7 @@ Add LLM config to `AgentLoopConfig`:
 
 ```typescript
 llm: {
-  provider: string;       // "anthropic"
+  provider: string;       // "anthropic" | "openai"
   model: string;          // "claude-sonnet-4-5-20250929"
   maxTokens: number;      // 8192
   temperature: number;    // 0
@@ -115,11 +122,12 @@ Add defaults for LLM config. Read `ANTHROPIC_API_KEY` from env.
 - Test error handling (4xx, 5xx, network errors)
 - Test rate limit retry logic
 - Test missing API key throws clear error
+- Test OpenAI tool-call mapping
 - Use a mock HTTP server (or mock fetch) — no real API calls in tests
 
 **File:** `agentloop/tests/llm/providers.test.ts`
 
-- Test factory resolves "anthropic" to AnthropicClient
+- Test factory resolves "anthropic" and "openai"
 - Test unknown provider throws
 
 ## New Dependencies
@@ -135,7 +143,7 @@ Add defaults for LLM config. Read `ANTHROPIC_API_KEY` from env.
 
 - [x] `LLMClient` interface defined with full type coverage
 - [ ] `AnthropicClient` makes real API calls (verified manually with a simple prompt)
-- [x] Provider registry resolves `"anthropic"`
+- [x] Provider registry resolves `"anthropic"` and `"openai"`
 - [x] Config schema extended with `llm` section
 - [x] All tests pass (32 new tests, 74 total)
 - [x] `pnpm build` succeeds
@@ -145,8 +153,10 @@ Add defaults for LLM config. Read `ANTHROPIC_API_KEY` from env.
 
 - `src/llm/client.ts` — LLMClient interface, Message/ContentBlock types, LLMError
 - `src/llm/anthropic.ts` — AnthropicClient with fetch, retry, error handling
+- `src/llm/openai.ts` — OpenAI-compatible client with tool-call mapping
 - `src/llm/providers.ts` — Provider registry (createLLMClient factory)
 - `src/types.ts` — Added LLMConfig schema to AgentLoopConfig
 - `src/config.ts` — Added llm defaults
 - `tests/llm/anthropic.test.ts` — 26 tests
+- `tests/llm/openai.test.ts` — OpenAI client and mapping tests
 - `tests/llm/providers.test.ts` — 6 tests

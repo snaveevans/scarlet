@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createLLMClient, availableProviders } from '../../src/llm/providers.js';
 import { LLMError } from '../../src/llm/client.js';
 import { AnthropicClient } from '../../src/llm/anthropic.js';
+import { OpenAIClient } from '../../src/llm/openai.js';
 
 describe('createLLMClient', () => {
   beforeEach(() => {
     vi.stubEnv('ANTHROPIC_API_KEY', 'test-key-for-provider');
+    vi.stubEnv('OPENAI_API_KEY', 'test-openai-key-for-provider');
   });
 
   afterEach(() => {
@@ -26,9 +28,16 @@ describe('createLLMClient', () => {
     expect(client).toBeInstanceOf(AnthropicClient);
   });
 
+  it('resolves "openai" to an OpenAIClient', () => {
+    const client = createLLMClient('openai');
+    expect(client).toBeInstanceOf(OpenAIClient);
+  });
+
   it('throws LLMError for unknown provider', () => {
-    expect(() => createLLMClient('openai')).toThrow(LLMError);
-    expect(() => createLLMClient('openai')).toThrow('Unknown LLM provider "openai"');
+    expect(() => createLLMClient('nonexistent')).toThrow(LLMError);
+    expect(() => createLLMClient('nonexistent')).toThrow(
+      'Unknown LLM provider "nonexistent"',
+    );
   });
 
   it('includes available providers in error message', () => {
@@ -36,14 +45,16 @@ describe('createLLMClient', () => {
       createLLMClient('nonexistent');
     } catch (e) {
       expect((e as LLMError).message).toContain('anthropic');
+      expect((e as LLMError).message).toContain('openai');
     }
   });
 });
 
 describe('availableProviders', () => {
-  it('returns list including anthropic', () => {
+  it('returns list including anthropic and openai', () => {
     const providers = availableProviders();
     expect(providers).toContain('anthropic');
+    expect(providers).toContain('openai');
   });
 
   it('returns an array', () => {

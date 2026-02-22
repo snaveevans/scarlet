@@ -2,14 +2,15 @@
  * LLM provider registry.
  *
  * Resolves a provider name (e.g. `"anthropic"`) to a configured {@link LLMClient}.
- * V1 only supports Anthropic — the registry pattern lets us add
- * OpenAI / OpenRouter / Ollama later without changing calling code.
+ * The registry pattern lets us add more providers without changing calling code.
  */
 
 import type { LLMClient } from './client.js';
 import { LLMError } from './client.js';
 import { AnthropicClient } from './anthropic.js';
 import type { AnthropicClientOptions } from './anthropic.js';
+import { OpenAIClient } from './openai.js';
+import type { OpenAIClientOptions } from './openai.js';
 
 // ---------------------------------------------------------------------------
 // Provider config
@@ -34,6 +35,11 @@ const PROVIDERS: Record<
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
     } satisfies AnthropicClientOptions),
+  openai: (config) =>
+    new OpenAIClient({
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+    } satisfies OpenAIClientOptions),
 };
 
 /**
