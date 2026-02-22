@@ -9,7 +9,8 @@
   "scripts": {
     "typecheck": "npm --prefix agentloop run typecheck",
     "build": "npm --prefix agentloop run build",
-    "test": "npm --prefix agentloop test"
+    "test": "npm --prefix agentloop test",
+    "test:prd-watch:setup": "bash scripts/setup-prd-log-watch-test.sh"
   },
   "repository": {
     "type": "git",
