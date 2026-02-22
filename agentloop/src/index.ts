@@ -15,6 +15,7 @@ import { runLoop } from './executor/executor.js';
 import { OpenCodeAdapter } from './executor/opencode-adapter.js';
 import { ScarletAdapter } from './executor/scarlet-adapter.js';
 import { createLLMClient } from './llm/providers.js';
+import { resolveModel } from './llm/routing.js';
 import { createCoreToolRegistry } from './tools/index.js';
 import {
   runComprehension,
@@ -83,7 +84,19 @@ program
     // Comprehension phase: generate tasks from AC instead of using PRD's predefined tasks
     if (shouldComprehend) {
       console.log('\n=== Running Comprehension Phase ===\n');
-      const llmClient = createLLMClient(config.llm.provider, {
+      const exploreRoute = resolveModel(config.modelRouting, 'explore');
+      const decomposeRoute = resolveModel(config.modelRouting, 'decompose');
+      const comprehensionProvider =
+        exploreRoute.provider === decomposeRoute.provider
+          ? exploreRoute.provider
+          : config.llm.provider;
+      if (exploreRoute.provider !== decomposeRoute.provider) {
+        console.warn(
+          `Comprehension routing provider mismatch (explore=${exploreRoute.provider}, decompose=${decomposeRoute.provider}); using ${comprehensionProvider}.`,
+        );
+      }
+
+      const llmClient = createLLMClient(comprehensionProvider, {
         apiKey: undefined,
         baseUrl: undefined,
       });
@@ -94,6 +107,12 @@ program
         llmClient,
         tools,
         projectRoot,
+        exploreModel: exploreRoute.model,
+        exploreMaxTokens: exploreRoute.maxTokens,
+        exploreTemperature: exploreRoute.temperature,
+        decomposeModel: decomposeRoute.model,
+        decomposeMaxTokens: decomposeRoute.maxTokens,
+        decomposeTemperature: decomposeRoute.temperature,
       });
 
       // Persist the plan
@@ -169,7 +188,19 @@ program
     const projectRoot = resolve(prd.meta.projectRoot);
     const config = loadConfig(projectRoot, { verbose: opts['verbose'] as boolean ?? false });
 
-    const llmClient = createLLMClient(config.llm.provider, {
+    const exploreRoute = resolveModel(config.modelRouting, 'explore');
+    const decomposeRoute = resolveModel(config.modelRouting, 'decompose');
+    const comprehensionProvider =
+      exploreRoute.provider === decomposeRoute.provider
+        ? exploreRoute.provider
+        : config.llm.provider;
+    if (exploreRoute.provider !== decomposeRoute.provider) {
+      console.warn(
+        `Comprehension routing provider mismatch (explore=${exploreRoute.provider}, decompose=${decomposeRoute.provider}); using ${comprehensionProvider}.`,
+      );
+    }
+
+    const llmClient = createLLMClient(comprehensionProvider, {
       apiKey: undefined,
       baseUrl: undefined,
     });
@@ -185,6 +216,12 @@ program
         llmClient,
         tools,
         projectRoot,
+        exploreModel: exploreRoute.model,
+        exploreMaxTokens: exploreRoute.maxTokens,
+        exploreTemperature: exploreRoute.temperature,
+        decomposeModel: decomposeRoute.model,
+        decomposeMaxTokens: decomposeRoute.maxTokens,
+        decomposeTemperature: decomposeRoute.temperature,
       });
 
       // Persist the plan
@@ -445,7 +482,8 @@ function buildCliOverrides(
 function resolveAgent(agentName: string, config: AgentLoopConfig) {
   switch (agentName) {
     case 'scarlet': {
-      const llmClient = createLLMClient(config.llm.provider, {
+      const codeRoute = resolveModel(config.modelRouting, 'code', 'medium');
+      const llmClient = createLLMClient(codeRoute.provider, {
         apiKey: undefined,       // read from env
         baseUrl: undefined,
       });
@@ -453,8 +491,9 @@ function resolveAgent(agentName: string, config: AgentLoopConfig) {
       return new ScarletAdapter({
         llmClient,
         tools,
-        model: config.llm.model,
-        maxTokens: config.llm.maxTokens,
+        model: codeRoute.model,
+        maxTokens: codeRoute.maxTokens,
+        temperature: codeRoute.temperature,
       });
     }
     case 'opencode':

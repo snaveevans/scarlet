@@ -21,6 +21,8 @@ export interface ScarletAdapterOptions {
   maxTurns?: number | undefined;
   /** Max tokens per LLM response. Default: 8192. */
   maxTokens?: number | undefined;
+  /** Sampling temperature. Default: 0. */
+  temperature?: number | undefined;
   /** Project conventions, tech stack, etc. for the system prompt. */
   promptContext?: SystemPromptContext | undefined;
 }
@@ -33,6 +35,7 @@ export class ScarletAdapter implements AgentAdapter {
   private readonly model: string | undefined;
   private readonly maxTurns: number;
   private readonly maxTokens: number;
+  private readonly temperature: number;
   private readonly promptContext: SystemPromptContext;
 
   constructor(options: ScarletAdapterOptions) {
@@ -41,6 +44,7 @@ export class ScarletAdapter implements AgentAdapter {
     this.model = options.model;
     this.maxTurns = options.maxTurns ?? 30;
     this.maxTokens = options.maxTokens ?? 8192;
+    this.temperature = options.temperature ?? 0;
     this.promptContext = options.promptContext ?? {};
   }
 
@@ -55,9 +59,10 @@ export class ScarletAdapter implements AgentAdapter {
       tools: this.tools,
       llmClient: this.llmClient,
       projectRoot: options.projectRoot,
-      model: this.model,
+      model: options.model ?? this.model,
       maxTurns: this.maxTurns,
-      maxTokens: this.maxTokens,
+      maxTokens: options.maxTokens ?? this.maxTokens,
+      temperature: options.temperature ?? this.temperature,
       onToolCall: options.verbose
         ? (name, input) => {
             console.log(`  [tool] ${name}(${JSON.stringify(input).slice(0, 100)})`);

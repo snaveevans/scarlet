@@ -18,6 +18,8 @@ export interface DecomposeOptions {
   understanding: CodebaseUnderstanding;
   llmClient: LLMClient;
   model?: string | undefined;
+  maxTokens?: number | undefined;
+  temperature?: number | undefined;
   /** Max retries on malformed LLM output. Default: 2. */
   maxRetries?: number | undefined;
 }
@@ -69,7 +71,15 @@ Respond with a JSON object (no markdown fences, no explanation) matching this sc
 export async function runDecompose(
   options: DecomposeOptions,
 ): Promise<ImplementationPlan> {
-  const { input, understanding, llmClient, model, maxRetries = 2 } = options;
+  const {
+    input,
+    understanding,
+    llmClient,
+    model,
+    maxTokens,
+    temperature,
+    maxRetries = 2,
+  } = options;
 
   const userPrompt = buildDecomposePrompt(input, understanding);
 
@@ -90,8 +100,8 @@ export async function runDecompose(
       messages,
       system: DECOMPOSE_SYSTEM_PROMPT,
       model,
-      maxTokens: 8192,
-      temperature: 0,
+      maxTokens: maxTokens ?? 8192,
+      temperature: temperature ?? 0,
     });
 
     const text = response.content

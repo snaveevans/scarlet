@@ -20,6 +20,8 @@ export interface ReflectionOptions {
   knowledgeStore: KnowledgeStore;
   understanding?: CodebaseUnderstanding | undefined;
   model?: string | undefined;
+  maxTokens?: number | undefined;
+  temperature?: number | undefined;
 }
 
 export interface ReflectionResult {
@@ -80,8 +82,8 @@ export async function runReflection(
     messages: [{ role: 'user', content: prompt }],
     system: REFLECTION_SYSTEM_PROMPT,
     model: options.model,
-    maxTokens: 4096,
-    temperature: 0,
+    maxTokens: options.maxTokens ?? 4096,
+    temperature: options.temperature ?? 0,
   });
 
   const text = response.content

@@ -39,6 +39,8 @@ export interface ExploreOptions {
   tools: ToolRegistry;
   projectRoot: string;
   model?: string | undefined;
+  maxTokens?: number | undefined;
+  temperature?: number | undefined;
 }
 
 const EXPLORE_SYSTEM_PROMPT = `You are analyzing a codebase to prepare for implementing a feature.
@@ -84,7 +86,15 @@ Respond ONLY with the JSON object. No markdown fences, no explanation.`;
  * Run the explore step: analyze the codebase and return a structured understanding.
  */
 export async function runExplore(options: ExploreOptions): Promise<CodebaseUnderstanding> {
-  const { input, llmClient, tools, projectRoot, model } = options;
+  const {
+    input,
+    llmClient,
+    tools,
+    projectRoot,
+    model,
+    maxTokens,
+    temperature,
+  } = options;
 
   const readOnlyTools = createReadOnlyRegistry(tools);
 
@@ -107,7 +117,8 @@ Explore the codebase to understand its structure, conventions, and any existing 
     projectRoot,
     model,
     maxTurns: 20,
-    maxTokens: 8192,
+    maxTokens: maxTokens ?? 8192,
+    temperature: temperature ?? 0,
   });
 
   return parseExploreOutput(result.finalMessage);

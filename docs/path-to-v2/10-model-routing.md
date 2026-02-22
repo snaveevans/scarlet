@@ -92,9 +92,9 @@ The change is small per file — just pass the model config when constructing th
 
 ## Definition of Done
 
-- [ ] Routing config resolves model per phase + complexity
-- [ ] Default routing table matches brainstorm-v2
-- [ ] Each phase uses resolved model (not hardcoded)
-- [ ] Custom routing configurable via `.agentloop/config.json`
-- [ ] All tests pass
-- [ ] `pnpm build` succeeds
+- [x] Routing config resolves model per phase + complexity
+- [x] Default routing table matches brainstorm-v2
+- [x] Each phase uses resolved model (not hardcoded)
+- [x] Custom routing configurable via `.agentloop/config.json`
+- [x] All tests pass (287 total)
+- [x] `pnpm build` succeeds

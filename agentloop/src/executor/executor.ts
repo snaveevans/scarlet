@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { resolveExecutionOrder, hasFailedDependency } from '../planner/dependency-graph.js';
 import { runValidationPipeline } from '../validator/validator.js';
 import { buildPrompt } from '../utils/context-builder.js';
+import { resolveModel, type TaskComplexity } from '../llm/routing.js';
 import { createLLMClient } from '../llm/providers.js';
 import {
   createPullRequest,
@@ -164,12 +165,20 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
         contextBudget: config.contextBudget,
         projectRoot,
       });
+      const codeModel = resolveModel(
+        config.modelRouting,
+        'code',
+        inferTaskComplexity(latestTask),
+      );
 
       const agentResult = await agent.execute({
         prompt,
         projectRoot,
         verbose: config.verbose,
         timeoutMs: config.taskTimeout,
+        model: codeModel.model,
+        maxTokens: codeModel.maxTokens,
+        temperature: codeModel.temperature,
       });
 
       if (!agentResult.success && !agentResult.stdout) {
@@ -284,12 +293,20 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
           contextBudget: config.contextBudget,
           projectRoot,
         });
+        const codeModel = resolveModel(
+          config.modelRouting,
+          'code',
+          inferTaskComplexity(taskState),
+        );
 
         const agentResult = await agent.execute({
           prompt,
           projectRoot,
           verbose: config.verbose,
           timeoutMs: config.taskTimeout,
+          model: codeModel.model,
+          maxTokens: codeModel.maxTokens,
+          temperature: codeModel.temperature,
         });
 
         if (!agentResult.success && !agentResult.stdout) {
@@ -359,9 +376,9 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
   }
 
   if (config.agent === 'scarlet') {
-    const llmProvider = config.llm?.provider ?? 'anthropic';
-    const reviewModel = config.llm?.model;
-    const llmClient = createLLMClient(llmProvider, {
+    const reviewRoute = resolveModel(config.modelRouting, 'review');
+    const reflectionRoute = resolveModel(config.modelRouting, 'reflect');
+    const reviewClient = createLLMClient(reviewRoute.provider, {
       apiKey: undefined,
       baseUrl: undefined,
     });
@@ -376,8 +393,10 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
         prdContent,
         acceptanceCriteria,
         diff,
-        llmClient,
-        model: reviewModel,
+        llmClient: reviewClient,
+        model: reviewRoute.model,
+        maxTokens: reviewRoute.maxTokens,
+        temperature: reviewRoute.temperature,
       });
 
       const formatted = formatReviewForPR(review);
@@ -416,6 +435,13 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
         : '';
       const reflectionPlan = buildReflectionPlan(stateManager.getState().tasks);
       const knowledgeStore = new FileKnowledgeStore(projectRoot);
+      const reflectionClient =
+        reflectionRoute.provider === reviewRoute.provider
+          ? reviewClient
+          : createLLMClient(reflectionRoute.provider, {
+              apiKey: undefined,
+              baseUrl: undefined,
+            });
 
       const reflection = await runReflection({
         prdName: prd.projectName,
@@ -424,9 +450,11 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
         plan: reflectionPlan,
         diff: reflectionDiff,
         progressLog: progressLogContent,
-        llmClient,
+        llmClient: reflectionClient,
         knowledgeStore,
-        model: reviewModel,
+        model: reflectionRoute.model,
+        maxTokens: reflectionRoute.maxTokens,
+        temperature: reflectionRoute.temperature,
       });
 
       progressLog.info(
@@ -591,6 +619,22 @@ function getRecentCompleted(tasks: Task[], count: number): Task[] {
       return bTime.localeCompare(aTime);
     })
     .slice(0, count);
+}
+
+function inferTaskComplexity(task: Task): TaskComplexity {
+  const fileCount = task.files.length;
+  const dependencyCount = task.depends.length;
+  const descriptionLength = task.description.trim().length;
+
+  if (fileCount >= 4 || dependencyCount >= 3 || descriptionLength >= 700) {
+    return 'high';
+  }
+
+  if (fileCount <= 1 && dependencyCount === 0 && descriptionLength <= 240) {
+    return 'low';
+  }
+
+  return 'medium';
 }
 
 /** Count independent dependency chains (tasks with no dependencies are chain roots). */

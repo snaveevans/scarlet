@@ -12,6 +12,8 @@ export interface SelfReviewOptions {
   diff: string;
   llmClient: LLMClient;
   model?: string | undefined;
+  maxTokens?: number | undefined;
+  temperature?: number | undefined;
 }
 
 const FixItemSchema = z.object({
@@ -49,8 +51,8 @@ export async function runSelfReview(
     messages: [{ role: 'user', content: prompt }],
     system: SELF_REVIEW_SYSTEM_PROMPT,
     model: options.model,
-    maxTokens: 4096,
-    temperature: 0,
+    maxTokens: options.maxTokens ?? 4096,
+    temperature: options.temperature ?? 0,
   });
 
   const text = response.content

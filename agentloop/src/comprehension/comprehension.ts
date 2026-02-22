@@ -23,8 +23,16 @@ export interface ComprehensionOptions {
   projectRoot: string;
   /** Model for exploration (should be strong reasoning). */
   exploreModel?: string | undefined;
+  /** Max tokens for exploration requests. */
+  exploreMaxTokens?: number | undefined;
+  /** Temperature for exploration requests. */
+  exploreTemperature?: number | undefined;
   /** Model for decomposition (should be strong reasoning). */
   decomposeModel?: string | undefined;
+  /** Max tokens for decomposition requests. */
+  decomposeMaxTokens?: number | undefined;
+  /** Temperature for decomposition requests. */
+  decomposeTemperature?: number | undefined;
 }
 
 export interface ComprehensionResult {
@@ -49,7 +57,11 @@ export async function runComprehension(
     tools,
     projectRoot,
     exploreModel,
+    exploreMaxTokens,
+    exploreTemperature,
     decomposeModel,
+    decomposeMaxTokens,
+    decomposeTemperature,
   } = options;
 
   // Step 1: Explore
@@ -59,6 +71,8 @@ export async function runComprehension(
     tools,
     projectRoot,
     model: exploreModel,
+    maxTokens: exploreMaxTokens,
+    temperature: exploreTemperature,
   });
 
   // Step 2+3: Decompose + Validate (with retry)
@@ -71,6 +85,8 @@ export async function runComprehension(
       understanding,
       llmClient,
       model: decomposeModel,
+      maxTokens: decomposeMaxTokens,
+      temperature: decomposeTemperature,
     });
 
     const validation = validatePlan(plan, input);

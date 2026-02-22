@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { Task } from './prd/schemas.js';
+import {
+  DEFAULT_MODEL_ROUTING,
+  ModelRoutingSchema,
+} from './llm/routing.js';
 
 export { Task, TaskStatus, PRD, PRDMeta } from './prd/schemas.js';
+export type { ModelConfig, ModelRouting, TaskComplexity } from './llm/routing.js';
 
 /**
  * Persisted snapshot of the entire execution loop.
@@ -88,6 +93,8 @@ export const AgentLoopConfig = z.object({
   verbose: z.boolean().default(false),
   /** LLM provider/model configuration for the native Scarlet agent. */
   llm: LLMConfig.default({}),
+  /** Phase-aware model routing configuration. */
+  modelRouting: ModelRoutingSchema.default(DEFAULT_MODEL_ROUTING),
 });
 
 export type AgentLoopConfig = z.infer<typeof AgentLoopConfig>;

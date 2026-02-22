@@ -35,6 +35,8 @@ export interface AgentOptions {
   maxTurns?: number | undefined;
   /** Max tokens per LLM response. Default: 8192. */
   maxTokens?: number | undefined;
+  /** Sampling temperature. Default: 0. */
+  temperature?: number | undefined;
   /** Called when a tool is invoked (for logging/observability). */
   onToolCall?: ((name: string, input: unknown) => void) | undefined;
   /** Called after each LLM response (for logging/observability). */
@@ -82,6 +84,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentLoopResult> 
     model,
     maxTurns = DEFAULT_MAX_TURNS,
     maxTokens = DEFAULT_MAX_TOKENS,
+    temperature = 0,
     onToolCall,
     onResponse,
   } = options;
@@ -109,7 +112,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentLoopResult> 
       tools: toolDefs.length > 0 ? toolDefs : undefined,
       model,
       maxTokens,
-      temperature: 0,
+      temperature,
     };
 
     const response = await llmClient.complete(request);
