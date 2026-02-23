@@ -101,11 +101,12 @@ function buildPipeline(
 
   if (steps.includes('test')) {
     if (task.tests.length > 0) {
-      const testFiles = task.tests.join(' ');
+      // Sanitize test file paths to prevent shell injection
+      const safeFiles = task.tests.map(sanitizeShellArg);
       const framework = meta.testFramework;
       pipeline.push({
         name: 'test',
-        command: `${framework} run ${testFiles}`,
+        command: `${framework} run ${safeFiles.join(' ')}`,
         required: true,
         timeoutMs: timeoutMs * 2, // tests get more time
       });
@@ -152,4 +153,12 @@ async function runStep(
     output,
     durationMs: result.durationMs,
   };
+}
+
+/**
+ * Sanitize a string for safe inclusion in a shell command.
+ * Removes shell metacharacters that could enable injection.
+ */
+function sanitizeShellArg(arg: string): string {
+  return arg.replace(/[;&|`$(){}!#"'\\<>\n\r]/g, '');
 }

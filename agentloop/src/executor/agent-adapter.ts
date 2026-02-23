@@ -5,6 +5,9 @@ export interface AgentExecuteOptions {
   projectRoot: string;
   verbose: boolean;
   timeoutMs?: number;
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
 }
 
 export interface AgentAdapter {

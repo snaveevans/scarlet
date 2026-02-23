@@ -7,9 +7,10 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "node --test 'tests/*.test.mjs'",
-    "prd:new": "node scripts/render-prd.mjs",
-    "validate:jsonl": "node scripts/validate-jsonl.mjs"
+    "typecheck": "npm --prefix agentloop run typecheck",
+    "build": "npm --prefix agentloop run build",
+    "test": "npm --prefix agentloop test",
+    "test:prd-watch:setup": "bash scripts/setup-prd-log-watch-test.sh"
   },
   "repository": {
     "type": "git",
@@ -17,9 +18,5 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1"
-  }
+  "license": "ISC"
 }

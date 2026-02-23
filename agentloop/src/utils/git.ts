@@ -1,4 +1,4 @@
-import { runShell, runShellCommand } from './shell.js';
+import { runShell } from './shell.js';
 
 export interface GitOptions {
   cwd: string;
@@ -25,10 +25,22 @@ export async function createAndCheckoutBranch(
   }
 }
 
+/** File patterns that should never be committed. */
+const SENSITIVE_PATTERNS = [
+  /^\.env($|\.)/,
+  /\.pem$/,
+  /\.key$/,
+  /^credentials\./,
+  /^\.secrets/,
+  /^id_rsa/,
+  /^id_ed25519/,
+];
+
 /**
  * Stage all changes and commit with the given message.
  * Returns the short SHA of the new commit.
  * Uses spawn args directly to avoid shell injection via commit messages.
+ * Warns and unstages files matching sensitive patterns before committing.
  */
 export async function stageAndCommit(
   message: string,
@@ -37,6 +49,23 @@ export async function stageAndCommit(
   const add = await runShell('git', ['add', '-A'], options);
   if (add.exitCode !== 0) {
     throw new Error(`git add failed: ${add.stderr}`);
+  }
+
+  // Check for sensitive files and unstage them
+  const staged = await runShell('git', ['diff', '--cached', '--name-only'], options);
+  if (staged.exitCode === 0 && staged.stdout.trim()) {
+    const files = staged.stdout.trim().split('\n');
+    const sensitiveFiles = files.filter((file) => {
+      const basename = file.split('/').pop() ?? file;
+      return SENSITIVE_PATTERNS.some((pattern) => pattern.test(basename));
+    });
+
+    if (sensitiveFiles.length > 0) {
+      console.warn(
+        `[git] Unstaging potentially sensitive files: ${sensitiveFiles.join(', ')}`,
+      );
+      await runShell('git', ['reset', 'HEAD', '--', ...sensitiveFiles], options);
+    }
   }
 
   const commit = await runShell('git', ['commit', '-m', message], options);
@@ -66,11 +95,111 @@ export async function getCurrentSha(options: GitOptions): Promise<string> {
 }
 
 /**
+ * Get the current branch name.
+ */
+export async function getCurrentBranch(options: GitOptions): Promise<string> {
+  const result = await runShell('git', ['rev-parse', '--abbrev-ref', 'HEAD'], options);
+  if (result.exitCode !== 0) {
+    throw new Error(`git rev-parse --abbrev-ref failed: ${result.stderr}`);
+  }
+
+  const branch = result.stdout.trim();
+  if (!branch) {
+    throw new Error('Could not determine current branch');
+  }
+  return branch;
+}
+
+/**
  * Check if the working tree has uncommitted changes.
  */
 export async function hasChanges(options: GitOptions): Promise<boolean> {
   const result = await runShell('git', ['status', '--porcelain'], options);
   return result.exitCode === 0 && result.stdout.trim().length > 0;
+}
+
+/**
+ * Push a branch to origin.
+ */
+export async function pushBranch(
+  branchName: string,
+  options: GitOptions,
+): Promise<void> {
+  const push = await runShell(
+    'git',
+    ['push', '--set-upstream', 'origin', branchName],
+    options,
+  );
+  if (push.exitCode !== 0) {
+    throw new Error(`git push failed: ${push.stderr || push.stdout}`);
+  }
+}
+
+/**
+ * Create a pull request with GitHub CLI and return its URL.
+ */
+export async function createPullRequest(
+  title: string,
+  body: string,
+  options: GitOptions,
+): Promise<string> {
+  const result = await runShell(
+    'gh',
+    ['pr', 'create', '--title', title, '--body', body],
+    options,
+  );
+  if (result.exitCode !== 0) {
+    throw new Error(`gh pr create failed: ${result.stderr || result.stdout}`);
+  }
+
+  return result.stdout.trim();
+}
+
+/**
+ * Auto-detect the default branch from the remote HEAD reference.
+ * Falls back to 'main' if detection fails.
+ */
+export async function detectDefaultBranch(options: GitOptions): Promise<string> {
+  const result = await runShell(
+    'git',
+    ['symbolic-ref', 'refs/remotes/origin/HEAD', '--short'],
+    options,
+  );
+  if (result.exitCode === 0 && result.stdout.trim()) {
+    // Returns e.g. "origin/main" — strip the remote prefix
+    return result.stdout.trim().replace(/^origin\//, '');
+  }
+  return 'main';
+}
+
+/**
+ * Get a textual diff from branch base to HEAD for review.
+ * Falls back to working-tree diff if base resolution fails.
+ * If no baseRef is provided, auto-detects the default branch.
+ */
+export async function getDiffAgainstBase(
+  options: GitOptions,
+  baseRef?: string | undefined,
+): Promise<string> {
+  const effectiveBase = baseRef ?? await detectDefaultBranch(options);
+  const mergeBase = await runShell('git', ['merge-base', 'HEAD', effectiveBase], options);
+  if (mergeBase.exitCode === 0) {
+    const baseSha = mergeBase.stdout.trim();
+    const diff = await runShell(
+      'git',
+      ['diff', '--no-color', `${baseSha}..HEAD`],
+      options,
+    );
+    if (diff.exitCode === 0) {
+      return diff.stdout;
+    }
+  }
+
+  const fallback = await runShell('git', ['diff', '--no-color', 'HEAD'], options);
+  if (fallback.exitCode !== 0) {
+    throw new Error(`git diff failed: ${fallback.stderr}`);
+  }
+  return fallback.stdout;
 }
 
 /**

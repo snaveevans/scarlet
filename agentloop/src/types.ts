@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { Task } from './prd/schemas.js';
+import {
+  DEFAULT_MODEL_ROUTING,
+  ModelRoutingSchema,
+} from './llm/routing.js';
 
 export { Task, TaskStatus, PRD, PRDMeta } from './prd/schemas.js';
+export type { ModelConfig, ModelRouting, TaskComplexity } from './llm/routing.js';
 
 /**
  * Persisted snapshot of the entire execution loop.
@@ -42,15 +47,36 @@ export type LoopState = z.infer<typeof LoopState>;
  * 2. `.agentloop/config.json` in the project root
  * 3. Built-in defaults (shown below)
  */
+/**
+ * LLM provider and model configuration.
+ *
+ * Used by the native Scarlet agent (Phase 1+). When the agent adapter is
+ * `"scarlet"`, these settings control which model is called.
+ */
+export const LLMConfig = z.object({
+  /** Provider name (e.g. `"anthropic"` or `"openai"`). */
+  provider: z.string().default('anthropic'),
+  /** Model identifier passed to the provider. */
+  model: z.string().default('claude-sonnet-4-5-20250929'),
+  /** Maximum tokens the model may generate per turn. */
+  maxTokens: z.number().int().positive().default(8192),
+  /** Sampling temperature (0 = deterministic). */
+  temperature: z.number().min(0).max(2).default(0),
+});
+
+export type LLMConfig = z.infer<typeof LLMConfig>;
+
 export const AgentLoopConfig = z.object({
-  /** Agent adapter name (currently only `"opencode"` is built-in). */
-  agent: z.string().default('opencode'),
+  /** Agent implementation name (`"scarlet"`). */
+  agent: z.string().default('scarlet'),
   /** Max retry attempts per task before marking it `failed`. */
   maxAttempts: z.number().int().positive().default(3),
   /** Whether to `git commit` after each passing task. */
   autoCommit: z.boolean().default(true),
   /** Git branch name. Defaults to `agentloop/<prd-name>`. */
   branch: z.string().optional(),
+  /** Base branch for diff comparison (e.g. `main`, `master`). Auto-detected if omitted. */
+  baseBranch: z.string().optional(),
   /** Skip tasks whose dependencies have failed. */
   skipFailedDeps: z.boolean().default(true),
   /** Ordered list of validation steps to run after each agent attempt. */
@@ -67,6 +93,10 @@ export const AgentLoopConfig = z.object({
   dryRun: z.boolean().default(false),
   /** Stream agent stdout/stderr to the terminal in real time. */
   verbose: z.boolean().default(false),
+  /** LLM provider/model configuration for the native Scarlet agent. */
+  llm: LLMConfig.default({}),
+  /** Phase-aware model routing configuration. */
+  modelRouting: ModelRoutingSchema.default(DEFAULT_MODEL_ROUTING),
 });
 
 export type AgentLoopConfig = z.infer<typeof AgentLoopConfig>;
