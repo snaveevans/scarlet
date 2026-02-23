@@ -630,8 +630,11 @@ function loadTaskFiles(
         path: filePath,
         content: readFileSync(fullPath, 'utf-8'),
       });
-    } catch {
-      // Skip unreadable files.
+    } catch (err) {
+      // Log rather than silently skip — makes debugging easier
+      console.warn(
+        `[loadTaskFiles] Skipping unreadable file "${filePath}": ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
   return loaded;

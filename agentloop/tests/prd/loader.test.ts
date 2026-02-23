@@ -74,4 +74,13 @@ Implement new login UX.
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('throws user-friendly error when PRD file does not exist', () => {
+    expect(() => loadPRD('/nonexistent/path/prd.md')).toThrow('PRD file not found');
+  });
+
+  it('throws user-friendly error with path in message', () => {
+    const badPath = '/tmp/does-not-exist-12345.md';
+    expect(() => loadPRD(badPath)).toThrow(badPath);
+  });
 });

@@ -39,6 +39,8 @@ export interface ComprehensionResult {
   understanding: CodebaseUnderstanding;
   plan: ImplementationPlan;
   decisions: Decision[];
+  /** Validation issues that were present in the final plan (empty if plan was valid). */
+  validationWarnings: string[];
 }
 
 /**
@@ -79,6 +81,7 @@ export async function runComprehension(
   const maxValidationRetries = 2;
   let plan: ImplementationPlan | undefined;
   let previousValidationErrors: string[] | undefined;
+  let finalValidationWarnings: string[] = [];
 
   for (let attempt = 0; attempt <= maxValidationRetries; attempt++) {
     plan = await runDecompose({
@@ -106,7 +109,8 @@ export async function runComprehension(
     previousValidationErrors = errors;
 
     if (attempt === maxValidationRetries) {
-      // Accept the plan with warnings — errors were logged
+      // Accept the plan but surface issues as warnings
+      finalValidationWarnings = errors;
       console.warn(
         `Plan validation has issues after ${maxValidationRetries + 1} attempts:\n` +
         errors.map((e) => `  - ${e}`).join('\n'),
@@ -123,5 +127,6 @@ export async function runComprehension(
     understanding,
     plan,
     decisions: plan.decisions,
+    validationWarnings: finalValidationWarnings,
   };
 }

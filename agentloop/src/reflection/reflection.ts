@@ -323,7 +323,14 @@ function applyReflectionUpdates(context: string, updates: string[]): string {
     '',
   ].join('\n');
 
-  return context.replace('\n## Team Notes', `\n${section}\n## Team Notes`);
+  // Try to insert before ## Team Notes; if the marker isn't present, append instead
+  const marker = '\n## Team Notes';
+  if (context.includes(marker)) {
+    return context.replace(marker, `\n${section}\n## Team Notes`);
+  }
+
+  // Append to end of context
+  return context.trimEnd() + '\n\n' + section;
 }
 
 function extractUserNotes(content: string): string | undefined {

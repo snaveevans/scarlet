@@ -24,7 +24,21 @@ function validateMetaCommands(meta: PRDMeta): void {
  * Load and parse a PRD file using automatic format detection.
  */
 export function loadPRD(filePath: string): LoadedPRD {
-  const content = readFileSync(filePath, 'utf-8');
+  let content: string;
+  try {
+    content = readFileSync(filePath, 'utf-8');
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      throw new Error(`PRD file not found: ${filePath}`);
+    }
+    if (code === 'EACCES') {
+      throw new Error(`Permission denied reading PRD file: ${filePath}`);
+    }
+    throw new Error(
+      `Failed to read PRD file "${filePath}": ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
   return loadPRDContent(content);
 }
 

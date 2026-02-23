@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync as fsWriteFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { FileKnowledgeStore } from '../../src/knowledge/file-store.js';
@@ -181,6 +181,35 @@ describe('runReflection', () => {
     const contextContent = readFileSync(result.contextPath, 'utf-8');
     expect(contextContent).toContain('## Reflection Updates');
     expect(contextContent).toContain('Adopt scaffold-first flow');
+  });
+
+  it('appends reflection updates when ## Team Notes marker is absent', async () => {
+    // Pre-create a context.md without ## Team Notes
+    const scarletDir = join(tempDir, '.scarlet');
+    mkdirSync(scarletDir, { recursive: true });
+    fsWriteFileSync(join(scarletDir, 'context.md'), '# Project Context\n\nSome content here.\n', 'utf-8');
+
+    const client = makeLLMClient({
+      skills: [],
+      pitfalls: [],
+      toolCandidates: [],
+      contextUpdates: ['New update that should be appended.'],
+    });
+
+    const result = await runReflection({
+      prdName: 'Phase 9',
+      projectRoot: tempDir,
+      tasks: [makeTask({ status: 'passed', attempts: 1 })],
+      plan: makePlan(),
+      diff: 'diff',
+      progressLog: '[T-001] PASSED',
+      llmClient: client,
+      knowledgeStore: store,
+    });
+
+    const contextContent = readFileSync(result.contextPath, 'utf-8');
+    expect(contextContent).toContain('## Reflection Updates');
+    expect(contextContent).toContain('New update that should be appended.');
   });
 });
 

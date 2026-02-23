@@ -137,6 +137,7 @@ describe('runComprehension', () => {
     expect(result.plan.tasks[0]!.id).toBe('T-001');
     expect(result.decisions).toHaveLength(1);
     expect(result.decisions[0]!.decision).toBe('Use JWT');
+    expect(result.validationWarnings).toEqual([]);
   });
 
   it('passes through explore model option', async () => {
