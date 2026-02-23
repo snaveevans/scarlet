@@ -166,6 +166,142 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     }
   }
 
+  // ── Shared single-task execution engine ───────────────────────────────────
+  interface TaskExecutionContext {
+    task: Task;
+    /** Prefix for commit messages (e.g. 'feat' or 'fix'). */
+    commitPrefix: string;
+    /** Phase label for the prompt builder ('code' or 'review-fix'). */
+    phase: string;
+  }
+
+  interface TaskExecutionResult {
+    passed: boolean;
+    attempts: number;
+  }
+
+  /**
+   * Run a single task through the attempt → agent → validate → commit loop.
+   * Shared by both executeStateTask and executeReviewFixTasks.
+   */
+  async function runSingleTask(ctx: TaskExecutionContext): Promise<TaskExecutionResult> {
+    const { task, commitPrefix, phase } = ctx;
+    const taskStartTime = Date.now();
+
+    for (let attempt = 1; attempt <= task.maxAttempts; attempt++) {
+      const latestTask = { ...task, attempts: attempt, error: attempt > 1 ? task.error : task.error };
+      const isRetry = attempt > 1;
+      const recentTasks = getRecentCompleted(stateManager.getState().tasks, 3);
+
+      const prompt = buildTaskPrompt({
+        memoryManager,
+        task: latestTask,
+        prd,
+        recentTasks,
+        isRetry,
+        projectRoot,
+        knowledgeStore: promptKnowledgeStore,
+        phase,
+      });
+      const codeModel = resolveModel(
+        config.modelRouting,
+        'code',
+        inferTaskComplexity(latestTask),
+      );
+
+      const agentResult = await agent.execute({
+        prompt,
+        projectRoot,
+        verbose: config.verbose,
+        timeoutMs: config.taskTimeout,
+        model: codeModel.model,
+        maxTokens: codeModel.maxTokens,
+        temperature: codeModel.temperature,
+      });
+
+      if (!agentResult.success && !agentResult.stdout) {
+        const errorMsg = agentResult.stderr || 'Agent exited with error';
+        task.error = errorMsg;
+        progressLog.taskRetry(
+          task.id,
+          attempt,
+          task.maxAttempts,
+          errorMsg,
+        );
+        if (attempt === task.maxAttempts) {
+          return { passed: false, attempts: attempt };
+        }
+        continue;
+      }
+
+      const validationResult = await runValidationPipeline(prd.meta, latestTask, {
+        steps: config.validationSteps,
+        timeoutMs: config.validationTimeout,
+        projectRoot,
+      });
+
+      progressLog.taskValidation(
+        task.id,
+        validationResult.results.map((r) => ({
+          name: r.step,
+          passed: r.passed,
+        })),
+      );
+
+      if (validationResult.allPassed) {
+        const durationMs = Date.now() - taskStartTime;
+        progressLog.taskPassed(
+          task.id,
+          attempt,
+          task.maxAttempts,
+          durationMs,
+        );
+
+        if (config.autoCommit) {
+          try {
+            const commitMsg = `${commitPrefix}(${task.id}): ${task.title}`;
+            const sha = await stageAndCommit(commitMsg, { cwd: projectRoot });
+            if (sha) {
+              progressLog.taskCommitted(task.id, sha, commitMsg);
+            }
+          } catch (err) {
+            progressLog.error(
+              `Commit failed for ${task.id}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+
+        memoryManager.addCompletedTask(task.id, task.title, 'passed');
+        for (const file of task.files) {
+          memoryManager.addModifiedFile(file);
+        }
+        return { passed: true, attempts: attempt };
+      }
+
+      const errorSummary = validationResult.errors.join('\n\n');
+      const firstFailedStep = validationResult.results.find((r) => !r.passed);
+      const retryReason = firstFailedStep
+        ? `${firstFailedStep.step} errors`
+        : 'validation failed';
+
+      task.error = errorSummary;
+      progressLog.taskRetry(
+        task.id,
+        attempt,
+        task.maxAttempts,
+        retryReason,
+      );
+
+      if (attempt === task.maxAttempts) {
+        return { passed: false, attempts: attempt };
+      }
+    }
+
+    return { passed: false, attempts: task.maxAttempts };
+  }
+
+  // ── Task executors ──────────────────────────────────────────────────────
+
   async function executeStateTask(taskSnapshot: Task): Promise<void> {
     const currentTask = stateManager.getTask(taskSnapshot.id);
     if (!currentTask) return;
@@ -186,133 +322,26 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     stateManager.setCurrentTask(currentTask.id);
     progressLog.taskStarted(currentTask.id, currentTask.title);
 
-    const taskStartTime = Date.now();
+    const result = await runSingleTask({
+      task: currentTask,
+      commitPrefix: 'feat',
+      phase: 'code',
+    });
 
-    for (let attempt = 1; attempt <= currentTask.maxAttempts; attempt++) {
-      stateManager.updateTask(currentTask.id, { attempts: attempt });
-      const latestTask = stateManager.getTask(currentTask.id)!;
-      const isRetry = attempt > 1;
-      const recentTasks = getRecentCompleted(stateManager.getState().tasks, 3);
-
-      const prompt = buildTaskPrompt({
-        memoryManager,
-        task: latestTask,
-        prd,
-        recentTasks,
-        isRetry,
-        projectRoot,
-        knowledgeStore: promptKnowledgeStore,
-        phase: 'code',
+    if (result.passed) {
+      stateManager.updateTask(currentTask.id, {
+        status: 'passed',
+        attempts: result.attempts,
+        completedAt: new Date().toISOString(),
       });
-      const codeModel = resolveModel(
-        config.modelRouting,
-        'code',
-        inferTaskComplexity(latestTask),
-      );
-
-      const agentResult = await agent.execute({
-        prompt,
-        projectRoot,
-        verbose: config.verbose,
-        timeoutMs: config.taskTimeout,
-        model: codeModel.model,
-        maxTokens: codeModel.maxTokens,
-        temperature: codeModel.temperature,
+    } else {
+      stateManager.updateTask(currentTask.id, {
+        status: 'failed',
+        attempts: result.attempts,
+        error: currentTask.error,
       });
-
-      if (!agentResult.success && !agentResult.stdout) {
-        const errorMsg = agentResult.stderr || 'Agent exited with error';
-        stateManager.updateTask(latestTask.id, { error: errorMsg });
-        progressLog.taskRetry(
-          latestTask.id,
-          attempt,
-          latestTask.maxAttempts,
-          errorMsg,
-        );
-
-        if (attempt === latestTask.maxAttempts) {
-          stateManager.updateTask(latestTask.id, {
-            status: 'failed',
-            error: errorMsg,
-          });
-          progressLog.taskFailed(latestTask.id, latestTask.maxAttempts, errorMsg);
-          memoryManager.addCompletedTask(latestTask.id, latestTask.title, 'failed');
-        }
-        continue;
-      }
-
-      const validationResult = await runValidationPipeline(prd.meta, latestTask, {
-        steps: config.validationSteps,
-        timeoutMs: config.validationTimeout,
-        projectRoot,
-      });
-
-      progressLog.taskValidation(
-        latestTask.id,
-        validationResult.results.map((r) => ({
-          name: r.step,
-          passed: r.passed,
-        })),
-      );
-
-      if (validationResult.allPassed) {
-        const durationMs = Date.now() - taskStartTime;
-        stateManager.updateTask(latestTask.id, {
-          status: 'passed',
-          completedAt: new Date().toISOString(),
-        });
-        progressLog.taskPassed(
-          latestTask.id,
-          attempt,
-          latestTask.maxAttempts,
-          durationMs,
-        );
-
-        if (config.autoCommit) {
-          try {
-            const commitMsg = `feat(${latestTask.id}): ${latestTask.title}`;
-            const sha = await stageAndCommit(commitMsg, { cwd: projectRoot });
-            if (sha) {
-              progressLog.taskCommitted(latestTask.id, sha, commitMsg);
-            }
-          } catch (err) {
-            progressLog.error(
-              `Commit failed for ${latestTask.id}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }
-
-        memoryManager.addCompletedTask(latestTask.id, latestTask.title, 'passed');
-        for (const file of latestTask.files) {
-          memoryManager.addModifiedFile(file);
-        }
-        stateManager.setCurrentTask(null);
-        return;
-      }
-
-      const errorSummary = validationResult.errors.join('\n\n');
-      const firstFailedStep = validationResult.results.find((r) => !r.passed);
-      const retryReason = firstFailedStep
-        ? `${firstFailedStep.step} errors`
-        : 'validation failed';
-
-      stateManager.updateTask(latestTask.id, { error: errorSummary });
-      progressLog.taskRetry(
-        latestTask.id,
-        attempt,
-        latestTask.maxAttempts,
-        retryReason,
-      );
-
-      if (attempt === latestTask.maxAttempts) {
-        stateManager.updateTask(latestTask.id, { status: 'failed' });
-        progressLog.taskFailed(
-          latestTask.id,
-          latestTask.maxAttempts,
-          retryReason,
-        );
-        memoryManager.addCompletedTask(latestTask.id, latestTask.title, 'failed');
-      }
+      progressLog.taskFailed(currentTask.id, result.attempts, currentTask.error ?? 'unknown');
+      memoryManager.addCompletedTask(currentTask.id, currentTask.title, 'failed');
     }
 
     stateManager.setCurrentTask(null);
@@ -321,101 +350,14 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
   async function executeReviewFixTasks(tasks: Task[]): Promise<void> {
     for (const fixTask of tasks) {
       progressLog.taskStarted(fixTask.id, fixTask.title);
-      const taskStartTime = Date.now();
-      let taskState: Task = { ...fixTask };
-      let passed = false;
 
-      for (let attempt = 1; attempt <= taskState.maxAttempts; attempt++) {
-        const isRetry = attempt > 1;
-        taskState = { ...taskState, attempts: attempt };
-        const recentTasks = getRecentCompleted(stateManager.getState().tasks, 3);
+      const result = await runSingleTask({
+        task: fixTask,
+        commitPrefix: 'fix',
+        phase: 'review-fix',
+      });
 
-        const prompt = buildTaskPrompt({
-          memoryManager,
-          task: taskState,
-          prd,
-          recentTasks,
-          isRetry,
-          projectRoot,
-          knowledgeStore: promptKnowledgeStore,
-          phase: 'review-fix',
-        });
-        const codeModel = resolveModel(
-          config.modelRouting,
-          'code',
-          inferTaskComplexity(taskState),
-        );
-
-        const agentResult = await agent.execute({
-          prompt,
-          projectRoot,
-          verbose: config.verbose,
-          timeoutMs: config.taskTimeout,
-          model: codeModel.model,
-          maxTokens: codeModel.maxTokens,
-          temperature: codeModel.temperature,
-        });
-
-        if (!agentResult.success && !agentResult.stdout) {
-          const reason = agentResult.stderr || 'Agent exited with error';
-          progressLog.taskRetry(taskState.id, attempt, taskState.maxAttempts, reason);
-          taskState = { ...taskState, error: reason };
-          continue;
-        }
-
-        const validationResult = await runValidationPipeline(prd.meta, taskState, {
-          steps: config.validationSteps,
-          timeoutMs: config.validationTimeout,
-          projectRoot,
-        });
-
-        progressLog.taskValidation(
-          taskState.id,
-          validationResult.results.map((r) => ({
-            name: r.step,
-            passed: r.passed,
-          })),
-        );
-
-        if (validationResult.allPassed) {
-          const durationMs = Date.now() - taskStartTime;
-          progressLog.taskPassed(
-            taskState.id,
-            attempt,
-            taskState.maxAttempts,
-            durationMs,
-          );
-
-          if (config.autoCommit) {
-            const commitMsg = `fix(${taskState.id}): ${taskState.title}`;
-            try {
-              const sha = await stageAndCommit(commitMsg, { cwd: projectRoot });
-              if (sha) {
-                progressLog.taskCommitted(taskState.id, sha, commitMsg);
-              }
-            } catch (err) {
-              progressLog.error(
-                `Commit failed for ${taskState.id}: ${err instanceof Error ? err.message : String(err)}`,
-              );
-            }
-          }
-
-          memoryManager.addCompletedTask(taskState.id, taskState.title, 'passed');
-          for (const file of taskState.files) {
-            memoryManager.addModifiedFile(file);
-          }
-          passed = true;
-          break;
-        }
-
-        const firstFailedStep = validationResult.results.find((r) => !r.passed);
-        const retryReason = firstFailedStep
-          ? `${firstFailedStep.step} errors`
-          : 'validation failed';
-        progressLog.taskRetry(taskState.id, attempt, taskState.maxAttempts, retryReason);
-      }
-
-      if (!passed) {
+      if (!result.passed) {
         memoryManager.addCompletedTask(fixTask.id, fixTask.title, 'failed');
         throw new Error(`Review fix task ${fixTask.id} failed`);
       }
