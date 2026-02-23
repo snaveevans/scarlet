@@ -139,15 +139,15 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
       meta: prd.meta,
     });
 
-    progressLog.info(
-      `[SCAFFOLD] Created ${scaffoldResult.filesCreated.length} files, ${scaffoldResult.testsCreated.length} test files`,
-    );
-
     if (!scaffoldResult.success) {
       const message = scaffoldResult.errors.join('\n\n');
       progressLog.error(`[SCAFFOLD] Failed:\n${message}`);
       throw new Error(`Scaffolding failed:\n${message}`);
     }
+
+    progressLog.info(
+      `[SCAFFOLD] Created ${scaffoldResult.filesCreated.length} files, ${scaffoldResult.testsCreated.length} test files`,
+    );
 
     if (config.autoCommit) {
       try {
