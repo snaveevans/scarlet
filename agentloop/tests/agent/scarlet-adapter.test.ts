@@ -14,6 +14,20 @@ function mockLLMClient(): LLMClient {
   };
 }
 
+function slowLLMClient(delayMs: number): LLMClient {
+  return {
+    complete: async (_req: LLMRequest): Promise<LLMResponse> => {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      return {
+        content: [{ type: 'text', text: 'Done.' }],
+        stopReason: 'end_turn',
+        usage: { inputTokens: 50, outputTokens: 30 },
+        model: 'test-model',
+      };
+    },
+  };
+}
+
 describe('ScarletAdapter', () => {
   it('has name "scarlet"', () => {
     const adapter = new ScarletAdapter({
@@ -111,5 +125,42 @@ describe('ScarletAdapter', () => {
     );
 
     consoleSpy.mockRestore();
+  });
+
+  it('returns timeout error when agent exceeds timeout', async () => {
+    const adapter = new ScarletAdapter({
+      llmClient: slowLLMClient(500),
+      tools: new DefaultToolRegistry(),
+    });
+
+    const result = await adapter.execute({
+      prompt: 'Slow task.',
+      projectRoot: '/tmp/test',
+      verbose: false,
+      timeoutMs: 50,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.stderr).toContain('timed out');
+  });
+
+  it('clears timeout when agent completes before deadline', async () => {
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+    const adapter = new ScarletAdapter({
+      llmClient: mockLLMClient(),
+      tools: new DefaultToolRegistry(),
+    });
+
+    const result = await adapter.execute({
+      prompt: 'Fast task.',
+      projectRoot: '/tmp/test',
+      verbose: false,
+      timeoutMs: 60_000,
+    });
+
+    expect(result.success).toBe(true);
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
   });
 });

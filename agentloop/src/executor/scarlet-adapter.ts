@@ -50,8 +50,12 @@ export class ScarletAdapter implements AgentAdapter {
 
   async execute(options: AgentExecuteOptions): Promise<AgentResult> {
     const startTime = Date.now();
+    const timeoutMs = options.timeoutMs;
 
     const systemPrompt = buildSystemPrompt(this.promptContext);
+
+    // Create an AbortController so we can cancel the agent on timeout
+    const controller = new AbortController();
 
     const agentPromise = runAgent({
       systemPrompt,
@@ -63,6 +67,7 @@ export class ScarletAdapter implements AgentAdapter {
       maxTurns: this.maxTurns,
       maxTokens: options.maxTokens ?? this.maxTokens,
       temperature: options.temperature ?? this.temperature,
+      signal: controller.signal,
       onToolCall: options.verbose
         ? (name, input) => {
             console.log(`  [tool] ${name}(${JSON.stringify(input).slice(0, 100)})`);
@@ -70,15 +75,16 @@ export class ScarletAdapter implements AgentAdapter {
         : undefined,
     });
 
-    const timeoutMs = options.timeoutMs;
     let result;
 
     if (timeoutMs !== undefined && timeoutMs > 0) {
+      let timerId: ReturnType<typeof setTimeout> | undefined;
+
       const timeout = new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error(`Agent timed out after ${timeoutMs}ms`)),
-          timeoutMs,
-        );
+        timerId = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`Agent timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
       });
 
       try {
@@ -90,6 +96,10 @@ export class ScarletAdapter implements AgentAdapter {
           stderr: err instanceof Error ? err.message : String(err),
           durationMs: Date.now() - startTime,
         };
+      } finally {
+        if (timerId !== undefined) {
+          clearTimeout(timerId);
+        }
       }
     } else {
       result = await agentPromise;

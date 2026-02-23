@@ -288,4 +288,43 @@ describe('runAgent', () => {
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
     expect(result.durationMs).toBeLessThan(5000);
   });
+
+  it('returns early when abort signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await runAgent(
+      baseOptions({ signal: controller.signal }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.turns).toBe(0);
+    expect(result.finalMessage).toBe('Agent aborted via signal.');
+  });
+
+  it('stops at next turn when signal is aborted mid-execution', async () => {
+    const controller = new AbortController();
+    const tool = makeTool('abort_trigger', async () => {
+      controller.abort();
+      return 'triggered abort';
+    });
+
+    const client = mockLLMClient([
+      toolUseResponse('abort_trigger', {}),
+      // Agent should never reach this response
+      textResponse('Should not reach.'),
+    ]);
+
+    const result = await runAgent(
+      baseOptions({
+        tools: makeRegistry(tool),
+        llmClient: client,
+        signal: controller.signal,
+      }),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.turns).toBe(1);
+    expect(result.finalMessage).toBe('Agent aborted via signal.');
+  });
 });

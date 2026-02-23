@@ -41,6 +41,8 @@ export interface AgentOptions {
   onToolCall?: ((name: string, input: unknown) => void) | undefined;
   /** Called after each LLM response (for logging/observability). */
   onResponse?: ((response: LLMResponse) => void) | undefined;
+  /** AbortSignal for cooperative cancellation (e.g. timeout). */
+  signal?: AbortSignal | undefined;
 }
 
 export interface ToolCallRecord {
@@ -95,6 +97,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentLoopResult> 
     temperature = 0,
     onToolCall,
     onResponse,
+    signal,
   } = options;
 
   const toolContext: ToolContext = { projectRoot };
@@ -112,6 +115,19 @@ export async function runAgent(options: AgentOptions): Promise<AgentLoopResult> 
   const startTime = Date.now();
 
   while (turns < maxTurns) {
+    // Cooperative cancellation — exit early if the signal is aborted
+    if (signal?.aborted) {
+      return {
+        success: false,
+        turns,
+        totalInputTokens,
+        totalOutputTokens,
+        toolCalls: toolCallRecords,
+        finalMessage: 'Agent aborted via signal.',
+        durationMs: Date.now() - startTime,
+      };
+    }
+
     turns++;
 
     const request: LLMRequest = {
