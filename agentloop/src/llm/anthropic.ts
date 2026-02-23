@@ -24,6 +24,7 @@ const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 const DEFAULT_MAX_TOKENS = 8192;
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
+const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 
 // ---------------------------------------------------------------------------
 // Anthropic API types (subset we care about)
@@ -186,88 +187,116 @@ export class AnthropicClient implements LLMClient {
     const body = buildRequestBody(request);
     let lastError: LLMError | undefined;
 
-    let retryAfterMs = 0;
+    const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const ac = new AbortController();
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 0) {
-        const backoff = INITIAL_BACKOFF_MS * 2 ** (attempt - 1);
-        const delay = Math.max(backoff, retryAfterMs);
-        await sleep(delay);
-        retryAfterMs = 0;
+    // Combine caller-provided signal with our timeout
+    if (request.signal) {
+      if (request.signal.aborted) {
+        throw new LLMError('Request aborted', undefined, false);
       }
-
-      try {
-        const response = await fetch(this.baseUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': this.apiKey,
-            'anthropic-version': API_VERSION,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          let message = `Anthropic API error ${response.status}: ${text}`;
-
-          try {
-            const errorBody = JSON.parse(text) as AnthropicErrorResponse;
-            if (errorBody.error?.message) {
-              message = `Anthropic API error ${response.status}: ${errorBody.error.message}`;
-            }
-          } catch {
-            // Use the raw text message
-          }
-
-          const retryable =
-            response.status === 429 ||
-            response.status === 500 ||
-            response.status === 502 ||
-            response.status === 503 ||
-            response.status === 529;
-
-          if (retryable && response.status === 429) {
-            retryAfterMs = parseRetryAfter(response.headers?.get('retry-after') ?? null);
-          }
-
-          lastError = new LLMError(message, response.status, retryable);
-
-          if (!retryable || attempt === MAX_RETRIES) {
-            throw lastError;
-          }
-          continue;
-        }
-
-        const data = (await response.json()) as AnthropicResponse;
-
-        return {
-          content: mapContentBlocks(data.content),
-          stopReason: mapStopReason(data.stop_reason),
-          usage: {
-            inputTokens: data.usage.input_tokens,
-            outputTokens: data.usage.output_tokens,
-          },
-          model: data.model,
-        };
-      } catch (error) {
-        if (error instanceof LLMError) {
-          throw error;
-        }
-        // Network error
-        lastError = new LLMError(
-          `Network error: ${error instanceof Error ? error.message : String(error)}`,
-          undefined,
-          true,
-        );
-        if (attempt === MAX_RETRIES) {
-          throw lastError;
-        }
-      }
+      request.signal.addEventListener('abort', () => ac.abort(request.signal!.reason), { once: true });
     }
 
-    // Should not reach here, but TypeScript needs it
-    throw lastError ?? new LLMError('Unknown error', undefined, false);
+    const timer = setTimeout(() => ac.abort('LLM request timed out'), timeoutMs);
+
+    let retryAfterMs = 0;
+
+    try {
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          const backoff = INITIAL_BACKOFF_MS * 2 ** (attempt - 1);
+          const delay = Math.max(backoff, retryAfterMs);
+          await sleep(delay);
+          retryAfterMs = 0;
+        }
+
+        try {
+          const response = await fetch(this.baseUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': this.apiKey,
+              'anthropic-version': API_VERSION,
+            },
+            body: JSON.stringify(body),
+            signal: ac.signal,
+          });
+
+          if (!response.ok) {
+            const text = await response.text();
+            let message = `Anthropic API error ${response.status}: ${text}`;
+
+            try {
+              const errorBody = JSON.parse(text) as AnthropicErrorResponse;
+              if (errorBody.error?.message) {
+                message = `Anthropic API error ${response.status}: ${errorBody.error.message}`;
+              }
+            } catch {
+              // Use the raw text message
+            }
+
+            const retryable =
+              response.status === 429 ||
+              response.status === 500 ||
+              response.status === 502 ||
+              response.status === 503 ||
+              response.status === 529;
+
+            if (retryable && response.status === 429) {
+              retryAfterMs = parseRetryAfter(response.headers?.get('retry-after') ?? null);
+            }
+
+            lastError = new LLMError(message, response.status, retryable);
+
+            if (!retryable || attempt === MAX_RETRIES) {
+              throw lastError;
+            }
+            continue;
+          }
+
+          const data = (await response.json()) as AnthropicResponse;
+
+          return {
+            content: mapContentBlocks(data.content),
+            stopReason: mapStopReason(data.stop_reason),
+            usage: {
+              inputTokens: data.usage.input_tokens,
+              outputTokens: data.usage.output_tokens,
+            },
+            model: data.model,
+          };
+        } catch (error) {
+          if (error instanceof LLMError) {
+            throw error;
+          }
+
+          // AbortError from timeout or caller signal
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new LLMError(
+              `Anthropic request aborted: ${ac.signal.reason ?? 'timed out'}`,
+              undefined,
+              false,
+            );
+          }
+
+          // Network error
+          lastError = new LLMError(
+            `Network error: ${error instanceof Error ? error.message : String(error)}`,
+            undefined,
+            true,
+          );
+          if (attempt === MAX_RETRIES) {
+            throw lastError;
+          }
+        }
+      }
+
+      // Should not reach here, but TypeScript needs it
+      throw lastError ?? new LLMError('Unknown error', undefined, false);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

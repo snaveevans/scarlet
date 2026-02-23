@@ -24,6 +24,7 @@ const DEFAULT_MODEL = 'gpt-4.1';
 const DEFAULT_MAX_TOKENS = 8192;
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 1000;
+const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 
 // ---------------------------------------------------------------------------
 // OpenAI API types (subset we care about)
@@ -254,95 +255,122 @@ export class OpenAIClient implements LLMClient {
     const body = buildRequestBody(request);
     let lastError: LLMError | undefined;
 
-    let retryAfterMs = 0;
+    const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const ac = new AbortController();
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      if (attempt > 0) {
-        const backoff = INITIAL_BACKOFF_MS * 2 ** (attempt - 1);
-        const delay = Math.max(backoff, retryAfterMs);
-        await sleep(delay);
-        retryAfterMs = 0;
+    // Combine caller-provided signal with our timeout
+    if (request.signal) {
+      if (request.signal.aborted) {
+        throw new LLMError('Request aborted', undefined, false);
       }
-
-      try {
-        const response = await fetch(this.baseUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.apiKey}`,
-          },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          let message = `OpenAI API error ${response.status}: ${text}`;
-
-          try {
-            const errorBody = JSON.parse(text) as OpenAIErrorResponse;
-            if (errorBody.error?.message) {
-              message = `OpenAI API error ${response.status}: ${errorBody.error.message}`;
-            }
-          } catch {
-            // Use raw text payload
-          }
-
-          const retryable =
-            response.status === 429 ||
-            response.status === 500 ||
-            response.status === 502 ||
-            response.status === 503 ||
-            response.status === 504;
-
-          if (retryable && response.status === 429) {
-            retryAfterMs = parseRetryAfter(response.headers?.get('retry-after') ?? null);
-          }
-
-          lastError = new LLMError(message, response.status, retryable);
-
-          if (!retryable || attempt === MAX_RETRIES) {
-            throw lastError;
-          }
-          continue;
-        }
-
-        const data = (await response.json()) as OpenAIResponse;
-        const choice = data.choices[0];
-        if (!choice) {
-          throw new LLMError(
-            'OpenAI API returned no choices',
-            response.status,
-            false,
-          );
-        }
-
-        return {
-          content: mapContentBlocks(choice.message),
-          stopReason: mapStopReason(choice.finish_reason),
-          usage: {
-            inputTokens: data.usage?.prompt_tokens ?? 0,
-            outputTokens: data.usage?.completion_tokens ?? 0,
-          },
-          model: data.model,
-        };
-      } catch (error) {
-        if (error instanceof LLMError) {
-          throw error;
-        }
-
-        lastError = new LLMError(
-          `Network error: ${error instanceof Error ? error.message : String(error)}`,
-          undefined,
-          true,
-        );
-
-        if (attempt === MAX_RETRIES) {
-          throw lastError;
-        }
-      }
+      request.signal.addEventListener('abort', () => ac.abort(request.signal!.reason), { once: true });
     }
 
-    throw lastError ?? new LLMError('Unknown error', undefined, false);
+    const timer = setTimeout(() => ac.abort('LLM request timed out'), timeoutMs);
+
+    let retryAfterMs = 0;
+
+    try {
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          const backoff = INITIAL_BACKOFF_MS * 2 ** (attempt - 1);
+          const delay = Math.max(backoff, retryAfterMs);
+          await sleep(delay);
+          retryAfterMs = 0;
+        }
+
+        try {
+          const response = await fetch(this.baseUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.apiKey}`,
+            },
+            body: JSON.stringify(body),
+            signal: ac.signal,
+          });
+
+          if (!response.ok) {
+            const text = await response.text();
+            let message = `OpenAI API error ${response.status}: ${text}`;
+
+            try {
+              const errorBody = JSON.parse(text) as OpenAIErrorResponse;
+              if (errorBody.error?.message) {
+                message = `OpenAI API error ${response.status}: ${errorBody.error.message}`;
+              }
+            } catch {
+              // Use raw text payload
+            }
+
+            const retryable =
+              response.status === 429 ||
+              response.status === 500 ||
+              response.status === 502 ||
+              response.status === 503 ||
+              response.status === 504;
+
+            if (retryable && response.status === 429) {
+              retryAfterMs = parseRetryAfter(response.headers?.get('retry-after') ?? null);
+            }
+
+            lastError = new LLMError(message, response.status, retryable);
+
+            if (!retryable || attempt === MAX_RETRIES) {
+              throw lastError;
+            }
+            continue;
+          }
+
+          const data = (await response.json()) as OpenAIResponse;
+          const choice = data.choices[0];
+          if (!choice) {
+            throw new LLMError(
+              'OpenAI API returned no choices',
+              response.status,
+              false,
+            );
+          }
+
+          return {
+            content: mapContentBlocks(choice.message),
+            stopReason: mapStopReason(choice.finish_reason),
+            usage: {
+              inputTokens: data.usage?.prompt_tokens ?? 0,
+              outputTokens: data.usage?.completion_tokens ?? 0,
+            },
+            model: data.model,
+          };
+        } catch (error) {
+          if (error instanceof LLMError) {
+            throw error;
+          }
+
+          // AbortError from timeout or caller signal
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            throw new LLMError(
+              `OpenAI request aborted: ${ac.signal.reason ?? 'timed out'}`,
+              undefined,
+              false,
+            );
+          }
+
+          lastError = new LLMError(
+            `Network error: ${error instanceof Error ? error.message : String(error)}`,
+            undefined,
+            true,
+          );
+
+          if (attempt === MAX_RETRIES) {
+            throw lastError;
+          }
+        }
+      }
+
+      throw lastError ?? new LLMError('Unknown error', undefined, false);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

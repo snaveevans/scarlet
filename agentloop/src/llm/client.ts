@@ -58,6 +58,10 @@ export interface LLMRequest {
   model?: string | undefined;
   maxTokens?: number | undefined;
   temperature?: number | undefined;
+  /** Abort signal forwarded to the underlying fetch call. */
+  signal?: AbortSignal | undefined;
+  /** Per-request timeout in milliseconds (default: 300 000 — 5 min). */
+  timeoutMs?: number | undefined;
 }
 
 export interface TokenUsage {

@@ -195,6 +195,59 @@ describe('OpenAIClient', () => {
       expect((error as LLMError).retryable).toBe(false);
       expect((error as LLMError).statusCode).toBe(401);
     });
+
+    it('passes signal to fetch', async () => {
+      mockFetchResponse(VALID_RESPONSE);
+      const client = new OpenAIClient();
+
+      await client.complete(SIMPLE_REQUEST);
+
+      const fetchMock = vi.mocked(fetch);
+      const [, options] = fetchMock.mock.calls[0]!;
+      expect(options?.signal).toBeDefined();
+      expect(options!.signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('throws LLMError when request times out', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((_url: string, opts: { signal?: AbortSignal }) => {
+          return new Promise((_resolve, reject) => {
+            opts?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('The operation was aborted.', 'AbortError'));
+            });
+          });
+        }),
+      );
+      const client = new OpenAIClient();
+
+      const error = await client.complete({ ...SIMPLE_REQUEST, timeoutMs: 50 }).catch((e) => e);
+      expect(error).toBeInstanceOf(LLMError);
+      expect((error as LLMError).message).toMatch(/aborted/i);
+      expect((error as LLMError).retryable).toBe(false);
+    });
+
+    it('throws LLMError when caller signal is already aborted', async () => {
+      mockFetchResponse(VALID_RESPONSE);
+      const client = new OpenAIClient();
+      const ac = new AbortController();
+      ac.abort('cancelled');
+
+      const error = await client.complete({ ...SIMPLE_REQUEST, signal: ac.signal }).catch((e) => e);
+      expect(error).toBeInstanceOf(LLMError);
+      expect((error as LLMError).message).toMatch(/aborted/i);
+    });
+
+    it('clears timeout on successful response', async () => {
+      const clearSpy = vi.spyOn(global, 'clearTimeout');
+      mockFetchResponse(VALID_RESPONSE);
+      const client = new OpenAIClient();
+
+      await client.complete(SIMPLE_REQUEST);
+
+      expect(clearSpy).toHaveBeenCalled();
+      clearSpy.mockRestore();
+    });
   });
 });
 
