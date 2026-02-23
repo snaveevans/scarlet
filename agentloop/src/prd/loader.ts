@@ -7,12 +7,9 @@ import type { PRD, PRDMeta } from './schemas.js';
 import type { PRDv2 } from './schemas-v2.js';
 import { validatePrdCommand } from '../utils/shell.js';
 
-export interface LoadedPRD {
-  format: PRDFormat;
-  v1?: PRD | undefined;
-  v2?: PRDv2 | undefined;
-  name: string;
-}
+export type LoadedPRD =
+  | { format: 'v1'; prd: PRD; name: string }
+  | { format: 'v2'; prd: PRDv2; name: string };
 
 /**
  * Validate that PRD meta commands are safe for shell execution.
@@ -42,7 +39,7 @@ export function loadPRDContent(content: string): LoadedPRD {
     validateMetaCommands(v1.meta);
     return {
       format,
-      v1,
+      prd: v1,
       name: v1.projectName,
     };
   }
@@ -50,7 +47,7 @@ export function loadPRDContent(content: string): LoadedPRD {
   const v2 = parsePRDv2(content);
   return {
     format,
-    v2,
+    prd: v2,
     name: v2.name,
   };
 }

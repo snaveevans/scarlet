@@ -37,8 +37,10 @@ Legacy project context.
       const loaded = loadPRD(file);
       expect(loaded.format).toBe('v1');
       expect(loaded.name).toBe('Legacy App');
-      expect(loaded.v1?.projectName).toBe('Legacy App');
-      expect(loaded.v2).toBeUndefined();
+      expect(loaded.prd).toBeDefined();
+      if (loaded.format === 'v1') {
+        expect(loaded.prd.projectName).toBe('Legacy App');
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -64,8 +66,10 @@ Implement new login UX.
       const loaded = loadPRD(file);
       expect(loaded.format).toBe('v2');
       expect(loaded.name).toBe('New Login');
-      expect(loaded.v2?.name).toBe('New Login');
-      expect(loaded.v1).toBeUndefined();
+      expect(loaded.prd).toBeDefined();
+      if (loaded.format === 'v2') {
+        expect(loaded.prd.name).toBe('New Login');
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -393,37 +393,23 @@ program
 
 function toLegacyPRD(loaded: LoadedPRD): LegacyPRD {
   if (loaded.format === 'v1') {
-    if (!loaded.v1) {
-      throw new Error('Loaded v1 PRD is missing parsed data');
-    }
-    return loaded.v1;
-  }
-
-  if (!loaded.v2) {
-    throw new Error('Loaded v2 PRD is missing parsed data');
+    return loaded.prd;
   }
 
   return {
-    projectName: loaded.v2.name,
+    projectName: loaded.prd.name,
     meta: PRDMeta.parse({ techStack: 'Unknown' }),
-    context: buildContextFromV2(loaded.v2),
+    context: buildContextFromV2(loaded.prd),
     tasks: [],
   };
 }
 
 function toComprehensionInput(loaded: LoadedPRD): ComprehensionInput {
   if (loaded.format === 'v1') {
-    if (!loaded.v1) {
-      throw new Error('Loaded v1 PRD is missing parsed data');
-    }
-    return prdToComprehensionInput(loaded.v1);
+    return prdToComprehensionInput(loaded.prd);
   }
 
-  if (!loaded.v2) {
-    throw new Error('Loaded v2 PRD is missing parsed data');
-  }
-
-  return prdV2ToComprehensionInput(loaded.v2);
+  return prdV2ToComprehensionInput(loaded.prd);
 }
 
 function buildContextFromV2(prd: PRDv2): string {
