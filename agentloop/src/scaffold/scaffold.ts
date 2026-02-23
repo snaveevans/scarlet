@@ -63,7 +63,7 @@ export async function runScaffold(
     if (existsSync(absPath)) continue;
 
     mkdirSync(dirname(absPath), { recursive: true });
-    writeFileSync(absPath, buildTestStub(testPath, todos), 'utf-8');
+    writeFileSync(absPath, buildTestStub(testPath, todos, meta.testFramework), 'utf-8');
     testsCreated.push(testPath);
   }
 
@@ -135,10 +135,11 @@ function buildSourceStub(filePath: string): string {
   ].join('\n');
 }
 
-function buildTestStub(testPath: string, todos: string[]): string {
+function buildTestStub(testPath: string, todos: string[], testFramework: string): string {
   const suiteName = basename(testPath).replace(/\.[^.]+$/, '');
+  const importLine = resolveTestImport(testFramework);
   const lines: string[] = [
-    "import { describe, it } from 'vitest';",
+    importLine,
     '',
     `describe('${escapeForSingleQuote(suiteName)}', () => {`,
   ];
@@ -168,6 +169,19 @@ function buildTestDiscoveryCommand(testFramework: string): string | null {
   }
 
   return trimmed;
+}
+
+function resolveTestImport(testFramework: string): string {
+  const fw = testFramework.toLowerCase().trim();
+  if (fw.includes('node:test') || fw === 'node --test') {
+    return "import { describe, it } from 'node:test';";
+  }
+  if (fw.includes('jest')) {
+    // Jest provides globals; no import needed but explicit import works
+    return "import { describe, it } from '@jest/globals';";
+  }
+  // Default to vitest (also works for mocha-like frameworks)
+  return "import { describe, it } from 'vitest';";
 }
 
 function escapeForSingleQuote(value: string): string {

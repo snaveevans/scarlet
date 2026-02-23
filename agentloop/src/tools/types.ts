@@ -6,6 +6,7 @@
  * {@link ToolHandler} interface and is registered in a {@link ToolRegistry}.
  */
 
+import { resolve, relative } from 'node:path';
 import type { ToolDefinition } from '../llm/client.js';
 
 // ---------------------------------------------------------------------------
@@ -65,7 +66,6 @@ export interface ToolRegistry {
  * @throws If the path escapes the project root or accesses .git.
  */
 export function safePath(projectRoot: string, inputPath: string): string {
-  const { resolve, relative } = require('node:path') as typeof import('node:path');
   const resolved = resolve(projectRoot, inputPath);
   const rel = relative(projectRoot, resolved);
 

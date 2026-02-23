@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { AgentLoopConfig } from './types.js';
+import { AgentLoopConfig as AgentLoopConfigSchema } from './types.js';
 import type { AgentLoopConfig as AgentLoopConfigType } from './types.js';
 import {
   DEFAULT_MODEL_ROUTING,
@@ -76,7 +76,7 @@ export function loadConfig(
           delete data.modelRouting;
         }
 
-        const result = AgentLoopConfig
+        const result = AgentLoopConfigSchema
           .omit({ modelRouting: true })
           .partial()
           .safeParse(data);
@@ -121,5 +121,5 @@ export function loadConfig(
     modelRouting,
   };
 
-  return AgentLoopConfig.parse(merged);
+  return AgentLoopConfigSchema.parse(merged);
 }

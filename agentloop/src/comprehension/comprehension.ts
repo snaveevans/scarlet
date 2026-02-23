@@ -78,6 +78,7 @@ export async function runComprehension(
   // Step 2+3: Decompose + Validate (with retry)
   const maxValidationRetries = 2;
   let plan: ImplementationPlan | undefined;
+  let previousValidationErrors: string[] | undefined;
 
   for (let attempt = 0; attempt <= maxValidationRetries; attempt++) {
     plan = await runDecompose({
@@ -88,6 +89,7 @@ export async function runComprehension(
       model: decomposeModel,
       maxTokens: decomposeMaxTokens,
       temperature: decomposeTemperature,
+      validationFeedback: previousValidationErrors,
     });
 
     const validation = validatePlan(plan, input);
@@ -96,10 +98,12 @@ export async function runComprehension(
       break;
     }
 
-    // Log validation issues
+    // Collect validation issues for feedback on next attempt
     const errors = validation.issues
       .filter((i) => i.severity === 'error')
       .map((i) => i.message);
+
+    previousValidationErrors = errors;
 
     if (attempt === maxValidationRetries) {
       // Accept the plan with warnings — errors were logged

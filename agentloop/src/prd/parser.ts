@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { PRD, PRDMeta, Task } from './schemas.js';
 import type { PRD as PRDType, Task as TaskType, PRDMeta as PRDMetaType } from './schemas.js';
+import { extractSection } from '../utils/markdown.js';
 
 /**
  * Parse a PRD markdown file into a structured PRD object.
@@ -164,33 +165,3 @@ function extractTestList(block: string): string[] {
     .filter(Boolean);
 }
 
-/**
- * Extract a top-level ## Section from the markdown.
- * Returns the content between the heading and the next ## heading.
- * Uses line-by-line parsing to avoid regex multiline $ issues.
- */
-function extractSection(content: string, sectionName: string): string | null {
-  const lines = content.split('\n');
-  const sectionRegex = new RegExp(`^##\\s+${sectionName}\\s*$`, 'i');
-  const nextSectionRegex = /^##\s+/;
-
-  let inSection = false;
-  const sectionLines: string[] = [];
-
-  for (const line of lines) {
-    if (!inSection) {
-      if (sectionRegex.test(line)) {
-        inSection = true;
-      }
-    } else {
-      if (nextSectionRegex.test(line)) {
-        break;
-      }
-      sectionLines.push(line);
-    }
-  }
-
-  if (!inSection) return null;
-  const result = sectionLines.join('\n').trim();
-  return result || null;
-}

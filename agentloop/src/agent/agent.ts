@@ -74,6 +74,14 @@ export interface AgentLoopResult {
 const DEFAULT_MAX_TURNS = 30;
 const DEFAULT_MAX_TOKENS = 8192;
 
+/**
+ * Warn and truncate old tool results when cumulative input tokens exceed this
+ * fraction of a typical context window (200k tokens). This is a conservative
+ * threshold — it leaves ample room for the model's response and system prompt.
+ */
+const INPUT_TOKEN_WARNING_THRESHOLD = 150_000;
+const MAX_TOOL_RESULT_LENGTH = 8000;
+
 export async function runAgent(options: AgentOptions): Promise<AgentLoopResult> {
   const {
     systemPrompt,
@@ -119,6 +127,15 @@ export async function runAgent(options: AgentOptions): Promise<AgentLoopResult> 
 
     totalInputTokens += response.usage.inputTokens;
     totalOutputTokens += response.usage.outputTokens;
+
+    // Guard against unbounded context growth — truncate old tool results
+    if (response.usage.inputTokens > INPUT_TOKEN_WARNING_THRESHOLD) {
+      console.warn(
+        `[agent] Input tokens (${response.usage.inputTokens}) exceeded ${INPUT_TOKEN_WARNING_THRESHOLD}. ` +
+        'Truncating old tool results to free context.',
+      );
+      truncateOldToolResults(messages);
+    }
 
     onResponse?.(response);
 
@@ -199,4 +216,31 @@ export async function runAgent(options: AgentOptions): Promise<AgentLoopResult> 
     finalMessage,
     durationMs: Date.now() - startTime,
   };
+}
+
+/**
+ * Truncate tool result content in older messages to reclaim context space.
+ * Keeps the first message (initial user prompt) and the last 4 messages
+ * intact. For messages in between, long tool_result content is replaced
+ * with a truncated summary.
+ */
+function truncateOldToolResults(messages: Message[]): void {
+  const preserveTail = 4;
+  const cutoff = Math.max(1, messages.length - preserveTail);
+
+  for (let i = 1; i < cutoff; i++) {
+    const msg = messages[i];
+    if (!msg || typeof msg.content === 'string') continue;
+
+    for (const block of msg.content) {
+      if (
+        block.type === 'tool_result' &&
+        block.content.length > MAX_TOOL_RESULT_LENGTH
+      ) {
+        block.content =
+          block.content.slice(0, MAX_TOOL_RESULT_LENGTH) +
+          '\n[... truncated to save context]';
+      }
+    }
+  }
 }

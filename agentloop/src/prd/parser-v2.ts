@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { PRDv2 } from './schemas-v2.js';
 import type { PRDv2 as PRDv2Type } from './schemas-v2.js';
+import { extractSection } from '../utils/markdown.js';
 
 /**
  * Parse a v2 PRD markdown file into a structured PRD object.
@@ -145,32 +146,3 @@ function extractADRs(
   });
 }
 
-/**
- * Extract a top-level ## Section from the markdown.
- * Returns the content between the heading and the next ## heading.
- */
-function extractSection(content: string, sectionName: string): string | null {
-  const lines = content.split('\n');
-  const sectionRegex = new RegExp(`^##\\s+${sectionName}\\s*$`, 'i');
-  const nextSectionRegex = /^##\s+/;
-
-  let inSection = false;
-  const sectionLines: string[] = [];
-
-  for (const line of lines) {
-    if (!inSection) {
-      if (sectionRegex.test(line)) {
-        inSection = true;
-      }
-    } else {
-      if (nextSectionRegex.test(line)) {
-        break;
-      }
-      sectionLines.push(line);
-    }
-  }
-
-  if (!inSection) return null;
-  const result = sectionLines.join('\n').trim();
-  return result || null;
-}

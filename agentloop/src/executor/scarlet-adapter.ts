@@ -53,7 +53,7 @@ export class ScarletAdapter implements AgentAdapter {
 
     const systemPrompt = buildSystemPrompt(this.promptContext);
 
-    const result = await runAgent({
+    const agentPromise = runAgent({
       systemPrompt,
       userPrompt: options.prompt,
       tools: this.tools,
@@ -69,6 +69,31 @@ export class ScarletAdapter implements AgentAdapter {
           }
         : undefined,
     });
+
+    const timeoutMs = options.timeoutMs;
+    let result;
+
+    if (timeoutMs !== undefined && timeoutMs > 0) {
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error(`Agent timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      });
+
+      try {
+        result = await Promise.race([agentPromise, timeout]);
+      } catch (err) {
+        return {
+          success: false,
+          stdout: '',
+          stderr: err instanceof Error ? err.message : String(err),
+          durationMs: Date.now() - startTime,
+        };
+      }
+    } else {
+      result = await agentPromise;
+    }
 
     return {
       success: result.success,

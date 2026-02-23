@@ -254,10 +254,14 @@ export class OpenAIClient implements LLMClient {
     const body = buildRequestBody(request);
     let lastError: LLMError | undefined;
 
+    let retryAfterMs = 0;
+
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
-        const delay = INITIAL_BACKOFF_MS * 2 ** (attempt - 1);
+        const backoff = INITIAL_BACKOFF_MS * 2 ** (attempt - 1);
+        const delay = Math.max(backoff, retryAfterMs);
         await sleep(delay);
+        retryAfterMs = 0;
       }
 
       try {
@@ -289,6 +293,10 @@ export class OpenAIClient implements LLMClient {
             response.status === 502 ||
             response.status === 503 ||
             response.status === 504;
+
+          if (retryable && response.status === 429) {
+            retryAfterMs = parseRetryAfter(response.headers?.get('retry-after') ?? null);
+          }
 
           lastError = new LLMError(message, response.status, retryable);
 
@@ -345,3 +353,22 @@ export class OpenAIClient implements LLMClient {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Parse a Retry-After header value into milliseconds.
+ * Supports both seconds (integer) and HTTP-date formats.
+ */
+function parseRetryAfter(header: string | null): number {
+  if (!header) return 0;
+  const seconds = Number(header);
+  if (!Number.isNaN(seconds) && seconds > 0) {
+    return seconds * 1000;
+  }
+  const date = Date.parse(header);
+  if (!Number.isNaN(date)) {
+    return Math.max(0, date - Date.now());
+  }
+  return 0;
+}
+
+export { parseRetryAfter };

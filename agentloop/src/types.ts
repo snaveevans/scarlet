@@ -75,6 +75,8 @@ export const AgentLoopConfig = z.object({
   autoCommit: z.boolean().default(true),
   /** Git branch name. Defaults to `agentloop/<prd-name>`. */
   branch: z.string().optional(),
+  /** Base branch for diff comparison (e.g. `main`, `master`). Auto-detected if omitted. */
+  baseBranch: z.string().optional(),
   /** Skip tasks whose dependencies have failed. */
   skipFailedDeps: z.boolean().default(true),
   /** Ordered list of validation steps to run after each agent attempt. */

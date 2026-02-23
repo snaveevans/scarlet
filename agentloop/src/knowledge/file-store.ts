@@ -480,7 +480,7 @@ function rankResults<T>(
     .filter((entry) => queryTokens.length === 0 || entry.score > 0)
     .sort((a, b) => b.score - a.score || b.usage - a.usage);
 
-  return ranked.slice(0, Math.max(1, limit)).map((entry) => entry.item);
+  return ranked.slice(0, Math.min(limit, ranked.length)).map((entry) => entry.item);
 }
 
 function stripDotSlash(value: string): string {

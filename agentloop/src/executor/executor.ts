@@ -430,7 +430,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     let reviewApproved = false;
 
     for (let cycle = 1; cycle <= maxReviewCycles; cycle++) {
-      const diff = await getDiffAgainstBase({ cwd: projectRoot }, 'main');
+      const diff = await getDiffAgainstBase({ cwd: projectRoot }, config.baseBranch);
       const review = await runSelfReview({
         prdContent,
         acceptanceCriteria,
@@ -470,7 +470,7 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
     }
 
     if (reviewApproved) {
-      const reflectionDiff = await getDiffAgainstBase({ cwd: projectRoot }, 'main');
+      const reflectionDiff = await getDiffAgainstBase({ cwd: projectRoot }, config.baseBranch);
       const progressLogPath = join(projectRoot, '.agentloop', 'progress.log');
       const progressLogContent = existsSync(progressLogPath)
         ? readFileSync(progressLogPath, 'utf-8')

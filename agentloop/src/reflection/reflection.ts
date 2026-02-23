@@ -8,6 +8,7 @@ import type { Pitfall, Skill } from '../knowledge/types.js';
 import type { LLMClient } from '../llm/client.js';
 import type { Task } from '../types.js';
 import { buildReflectionPrompt, REFLECTION_SYSTEM_PROMPT } from './prompts.js';
+import { stripCodeFence } from '../utils/markdown.js';
 
 export interface ReflectionOptions {
   prdName: string;
@@ -420,9 +421,3 @@ function dedupeStrings(values: string[]): string[] {
   return result;
 }
 
-function stripCodeFence(value: string): string {
-  if (!value.startsWith('```')) return value;
-  return value
-    .replace(/^```(?:json)?\s*\n?/, '')
-    .replace(/\n?```\s*$/, '');
-}

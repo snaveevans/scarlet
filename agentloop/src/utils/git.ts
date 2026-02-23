@@ -25,10 +25,22 @@ export async function createAndCheckoutBranch(
   }
 }
 
+/** File patterns that should never be committed. */
+const SENSITIVE_PATTERNS = [
+  /^\.env($|\.)/,
+  /\.pem$/,
+  /\.key$/,
+  /^credentials\./,
+  /^\.secrets/,
+  /^id_rsa/,
+  /^id_ed25519/,
+];
+
 /**
  * Stage all changes and commit with the given message.
  * Returns the short SHA of the new commit.
  * Uses spawn args directly to avoid shell injection via commit messages.
+ * Warns and unstages files matching sensitive patterns before committing.
  */
 export async function stageAndCommit(
   message: string,
@@ -37,6 +49,23 @@ export async function stageAndCommit(
   const add = await runShell('git', ['add', '-A'], options);
   if (add.exitCode !== 0) {
     throw new Error(`git add failed: ${add.stderr}`);
+  }
+
+  // Check for sensitive files and unstage them
+  const staged = await runShell('git', ['diff', '--cached', '--name-only'], options);
+  if (staged.exitCode === 0 && staged.stdout.trim()) {
+    const files = staged.stdout.trim().split('\n');
+    const sensitiveFiles = files.filter((file) => {
+      const basename = file.split('/').pop() ?? file;
+      return SENSITIVE_PATTERNS.some((pattern) => pattern.test(basename));
+    });
+
+    if (sensitiveFiles.length > 0) {
+      console.warn(
+        `[git] Unstaging potentially sensitive files: ${sensitiveFiles.join(', ')}`,
+      );
+      await runShell('git', ['reset', 'HEAD', '--', ...sensitiveFiles], options);
+    }
   }
 
   const commit = await runShell('git', ['commit', '-m', message], options);
@@ -127,14 +156,33 @@ export async function createPullRequest(
 }
 
 /**
+ * Auto-detect the default branch from the remote HEAD reference.
+ * Falls back to 'main' if detection fails.
+ */
+export async function detectDefaultBranch(options: GitOptions): Promise<string> {
+  const result = await runShell(
+    'git',
+    ['symbolic-ref', 'refs/remotes/origin/HEAD', '--short'],
+    options,
+  );
+  if (result.exitCode === 0 && result.stdout.trim()) {
+    // Returns e.g. "origin/main" — strip the remote prefix
+    return result.stdout.trim().replace(/^origin\//, '');
+  }
+  return 'main';
+}
+
+/**
  * Get a textual diff from branch base to HEAD for review.
  * Falls back to working-tree diff if base resolution fails.
+ * If no baseRef is provided, auto-detects the default branch.
  */
 export async function getDiffAgainstBase(
   options: GitOptions,
-  baseRef = 'main',
+  baseRef?: string | undefined,
 ): Promise<string> {
-  const mergeBase = await runShell('git', ['merge-base', 'HEAD', baseRef], options);
+  const effectiveBase = baseRef ?? await detectDefaultBranch(options);
+  const mergeBase = await runShell('git', ['merge-base', 'HEAD', effectiveBase], options);
   if (mergeBase.exitCode === 0) {
     const baseSha = mergeBase.stdout.trim();
     const diff = await runShell(

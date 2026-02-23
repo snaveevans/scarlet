@@ -24,6 +24,8 @@ export interface DecomposeOptions {
   temperature?: number | undefined;
   /** Max retries on malformed LLM output. Default: 2. */
   maxRetries?: number | undefined;
+  /** Validation errors from a previous decompose attempt to feed back to the LLM. */
+  validationFeedback?: string[] | undefined;
 }
 
 const DECOMPOSE_SYSTEM_PROMPT = `You are a software architect decomposing a feature into implementation tasks.
@@ -82,6 +84,7 @@ export async function runDecompose(
     maxTokens,
     temperature,
     maxRetries = 2,
+    validationFeedback,
   } = options;
 
   const basePrompt = buildDecomposePrompt(input, understanding);
@@ -100,14 +103,23 @@ export async function runDecompose(
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const messages = attempt === 0
+    const feedbackParts: string[] = [];
+
+    if (attempt === 0 && validationFeedback && validationFeedback.length > 0) {
+      feedbackParts.push(
+        `Your previous plan had structural validation issues:\n${validationFeedback.map((issue) => `- ${issue}`).join('\n')}\n\nPlease fix these issues in the new plan.`,
+      );
+    } else if (attempt > 0 && lastError) {
+      feedbackParts.push(
+        `Your previous response was not valid JSON or failed validation: ${lastError.message}. Please try again, responding with ONLY the JSON object.`,
+      );
+    }
+
+    const messages = feedbackParts.length === 0
       ? [{ role: 'user' as const, content: userPrompt }]
       : [
           { role: 'user' as const, content: userPrompt },
-          {
-            role: 'user' as const,
-            content: `Your previous response was not valid JSON or failed validation: ${lastError?.message}. Please try again, responding with ONLY the JSON object.`,
-          },
+          { role: 'user' as const, content: feedbackParts.join('\n\n') },
         ];
 
     const response = await llmClient.complete({

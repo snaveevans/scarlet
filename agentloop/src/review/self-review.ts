@@ -5,6 +5,7 @@ import {
   buildSelfReviewPrompt,
   SELF_REVIEW_SYSTEM_PROMPT,
 } from './prompts.js';
+import { stripCodeFence } from '../utils/markdown.js';
 
 export interface SelfReviewOptions {
   prdContent: string;
@@ -103,13 +104,6 @@ export function reviewFixesToTasks(
       maxAttempts: fix.severity === 'must-fix' ? 2 : 1,
     };
   });
-}
-
-function stripCodeFence(value: string): string {
-  if (!value.startsWith('```')) return value;
-  return value
-    .replace(/^```(?:json)?\s*\n?/, '')
-    .replace(/\n?```\s*$/, '');
 }
 
 function truncate(value: string, max: number): string {
