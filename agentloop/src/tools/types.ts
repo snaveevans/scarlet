@@ -7,6 +7,7 @@
  */
 
 import { resolve, relative } from 'node:path';
+import { realpathSync, existsSync } from 'node:fs';
 import type { ToolDefinition } from '../llm/client.js';
 
 // ---------------------------------------------------------------------------
@@ -60,12 +61,21 @@ export interface ToolRegistry {
 
 /**
  * Resolve a path relative to the project root and verify it doesn't escape.
- * Rejects paths that traverse above projectRoot or access .git internals.
+ * Rejects paths that:
+ * - Traverse above projectRoot
+ * - Access .git internals
+ * - Contain null bytes
+ * - Resolve (via symlinks) to a location outside projectRoot
  *
  * @returns The resolved absolute path.
  * @throws If the path escapes the project root or accesses .git.
  */
 export function safePath(projectRoot: string, inputPath: string): string {
+  // Reject null bytes — they can truncate paths in C-backed FS calls
+  if (inputPath.includes('\0')) {
+    throw new Error(`Path contains null byte: "${inputPath}"`);
+  }
+
   const resolved = resolve(projectRoot, inputPath);
   const rel = relative(projectRoot, resolved);
 
@@ -79,6 +89,20 @@ export function safePath(projectRoot: string, inputPath: string): string {
   const segments = rel.split('/');
   if (segments[0] === '.git') {
     throw new Error(`Access to .git/ internals is not allowed`);
+  }
+
+  // If the path exists, resolve symlinks and re-check containment.
+  // This prevents a symlink inside the project from pointing outside it.
+  if (existsSync(resolved)) {
+    const realResolved = realpathSync(resolved);
+    const realRoot = realpathSync(projectRoot);
+    const realRel = relative(realRoot, realResolved);
+
+    if (realRel.startsWith('..') || realRel.startsWith('/')) {
+      throw new Error(
+        `Path "${inputPath}" resolves via symlink to "${realResolved}" which is outside the project root`,
+      );
+    }
   }
 
   return resolved;

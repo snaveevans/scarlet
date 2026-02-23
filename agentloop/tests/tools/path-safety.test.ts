@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, symlinkSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { safePath } from '../../src/tools/types.js';
 
 describe('safePath', () => {
@@ -49,6 +52,45 @@ describe('safePath', () => {
   it('allows .scarlet directory', () => {
     expect(safePath(root, '.scarlet/knowledge/skills.json')).toBe(
       '/home/user/project/.scarlet/knowledge/skills.json',
+    );
+  });
+
+  it('rejects paths containing null bytes', () => {
+    expect(() => safePath(root, 'src/index\0.ts')).toThrow('null byte');
+    expect(() => safePath(root, '\0etc/passwd')).toThrow('null byte');
+  });
+});
+
+describe('safePath symlink handling', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'scarlet-path-test-'));
+    mkdirSync(join(tempDir, 'src'));
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('allows symlinks that stay within project root', () => {
+    // Create a symlink inside the project pointing to another location inside
+    symlinkSync(join(tempDir, 'src'), join(tempDir, 'link-to-src'));
+    expect(() => safePath(tempDir, 'link-to-src')).not.toThrow();
+  });
+
+  it('rejects symlinks that escape project root', () => {
+    // Create a symlink inside the project pointing to /tmp (outside project)
+    symlinkSync('/tmp', join(tempDir, 'escape-link'));
+    expect(() => safePath(tempDir, 'escape-link')).toThrow(
+      'outside the project root',
+    );
+  });
+
+  it('rejects symlinks to sensitive locations', () => {
+    symlinkSync('/etc', join(tempDir, 'etc-link'));
+    expect(() => safePath(tempDir, 'etc-link')).toThrow(
+      'outside the project root',
     );
   });
 });
