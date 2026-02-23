@@ -3,14 +3,24 @@ import { detectPRDFormat } from './detect-format.js';
 import type { PRDFormat } from './detect-format.js';
 import { parsePRD } from './parser.js';
 import { parsePRDv2 } from './parser-v2.js';
-import type { PRD } from './schemas.js';
+import type { PRD, PRDMeta } from './schemas.js';
 import type { PRDv2 } from './schemas-v2.js';
+import { validatePrdCommand } from '../utils/shell.js';
 
 export interface LoadedPRD {
   format: PRDFormat;
   v1?: PRD | undefined;
   v2?: PRDv2 | undefined;
   name: string;
+}
+
+/**
+ * Validate that PRD meta commands are safe for shell execution.
+ */
+function validateMetaCommands(meta: PRDMeta): void {
+  validatePrdCommand(meta.typecheckCommand, 'typecheckCommand');
+  validatePrdCommand(meta.lintCommand, 'lintCommand');
+  validatePrdCommand(meta.buildCommand, 'buildCommand');
 }
 
 /**
@@ -29,6 +39,7 @@ export function loadPRDContent(content: string): LoadedPRD {
 
   if (format === 'v1') {
     const v1 = parsePRD(content);
+    validateMetaCommands(v1.meta);
     return {
       format,
       v1,
