@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -70,6 +70,11 @@ import {
   formatReviewForPR,
 } from '../../src/review/index.js';
 import { runReflection } from '../../src/reflection/index.js';
+import {
+  createAndCheckoutBranch,
+  getCurrentBranch,
+  sanitizeBranchName,
+} from '../../src/utils/git.js';
 
 const mockPRD: PRD = {
   projectName: 'Test Project',
@@ -380,5 +385,39 @@ describe('runLoop', () => {
 
     expect(runSelfReview).toHaveBeenCalledTimes(2);
     expect(runReflection).not.toHaveBeenCalled();
+  });
+
+  it('throws fatal error when branch creation fails', async () => {
+    vi.mocked(sanitizeBranchName).mockReturnValue('test-project');
+    vi.mocked(createAndCheckoutBranch).mockRejectedValue(
+      new Error('fatal: not a git repository'),
+    );
+
+    const agent = makeMockAgent(true);
+    const prd: PRD = { ...mockPRD, meta: { ...mockPRD.meta, projectRoot: tmpDir } };
+    const autoCommitConfig: AgentLoopConfig = { ...mockConfig, autoCommit: true };
+
+    await expect(
+      runLoop({ prd, prdFile: '/prd.md', config: autoCommitConfig, agent, stateManager, progressLog }),
+    ).rejects.toThrow('Fatal: failed to create/checkout branch');
+
+    // Agent should never have been called
+    expect(agent.execute).not.toHaveBeenCalled();
+  });
+
+  it('throws fatal error when post-checkout branch does not match', async () => {
+    vi.mocked(sanitizeBranchName).mockReturnValue('test-project');
+    vi.mocked(createAndCheckoutBranch).mockResolvedValue(undefined);
+    vi.mocked(getCurrentBranch).mockResolvedValue('main');
+
+    const agent = makeMockAgent(true);
+    const prd: PRD = { ...mockPRD, meta: { ...mockPRD.meta, projectRoot: tmpDir } };
+    const autoCommitConfig: AgentLoopConfig = { ...mockConfig, autoCommit: true };
+
+    await expect(
+      runLoop({ prd, prdFile: '/prd.md', config: autoCommitConfig, agent, stateManager, progressLog }),
+    ).rejects.toThrow('expected branch');
+
+    expect(agent.execute).not.toHaveBeenCalled();
   });
 });

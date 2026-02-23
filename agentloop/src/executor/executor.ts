@@ -109,12 +109,22 @@ export async function runLoop(options: ExecutorOptions): Promise<void> {
       config.branch ?? `agentloop/${sanitizeBranchName(prd.projectName)}`;
     try {
       await createAndCheckoutBranch(branchName, { cwd: projectRoot });
-      progressLog.info(`Git branch: ${branchName}`);
     } catch (err) {
-      progressLog.error(
-        `Failed to create branch: ${err instanceof Error ? err.message : String(err)}`,
+      throw new Error(
+        `Fatal: failed to create/checkout branch "${branchName}": ${err instanceof Error ? err.message : String(err)}. ` +
+        `Refusing to continue — commits would land on the wrong branch.`,
       );
     }
+
+    // Verify we're actually on the expected branch
+    const currentBranch = await getCurrentBranch({ cwd: projectRoot });
+    if (currentBranch !== branchName) {
+      throw new Error(
+        `Fatal: expected branch "${branchName}" but currently on "${currentBranch}". ` +
+        `Refusing to continue — commits would land on the wrong branch.`,
+      );
+    }
+    progressLog.info(`Git branch: ${branchName}`);
   }
 
   if (config.dryRun) {
